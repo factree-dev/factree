@@ -143,6 +143,7 @@ for l in $P/lenses/backend.md $P/lenses/frontend.md $P/lenses/infra.md; do
 done
 gaps=$(awk '/^## Gaps to check$/{g=1;next} /^## /{g=0} g' $P/lenses/backend.md)
 check "backend lens asks about stale state and input as sent [factory-quality#R3.S1]" 'echo "$gaps" | grep -q "await" && echo "$gaps" | grep -q "encoding" && ! echo "$gaps" | grep -E "await|encoding" | grep -q -i -E "express|django|rails|spring|node"'
+check "branch reviewers are told to tag security suggestions [factory-quality#R5.S3]" 'awk "/^## Branch/{b=1} b" $P/skills/build/review-prompt.md | grep -q "security:"'
 
 echo "# session hook and events"
 HOOK=$P/scripts/session-hook.sh

@@ -52,7 +52,7 @@ You are reviewing a whole branch before it's verified and goes to human reviewer
 - **Consistency across tasks:** the same thing named or done two ways, duplicated logic, an interface one task produces and another uses differently.
 - **Risk areas:** what the plan's lenses say to watch (security, performance, concurrency, migrations).
 - **Tests:** each scenario's test checks its outcome; nothing only checks that code runs.
-- **Beyond the sources:** each finding says whether the spec or its sources ask for what it wants, quoting the line. If none does, set `beyond_sources: true`, whatever the severity. A defect in what the spec or its sources do ask for (a crash-safety ticket and a double write) is not beyond them.
+- **Beyond the sources:** each finding says whether the spec or its sources ask for what it wants, quoting the line. If none does, set `beyond_sources: true`, whatever the severity. A defect in what the spec or its sources do ask for (a crash-safety ticket and a double write) is not beyond them. A security risk beyond the sources is still reported, its text starting `security:`.
 - **Deferred findings:** the minor findings from the task reviews, listed in `plan.md` or given to you; say which must be fixed now.
 
 **Probe the code, don't only read it.** For each gap check or scale trigger in the lenses that the branch touches, write throwaway probes in a scratch folder outside the repo and run them against the checkout. Start the service with the start command if it runs; if it can't (a database or secret you don't have), call its functions and modules directly. Stop everything a probe starts, and leave nothing in the repo or the checkout. If the branch touches no gap check or trigger, write no probes.
