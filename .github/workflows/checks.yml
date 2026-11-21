@@ -32,6 +32,7 @@ jobs:
         run: npm run build
         working-directory: apps/companion
       - name: The built UI is committed and up to date
-        run: git diff --exit-code -- plugins/factree/ui || { echo "::error::plugins/factree/ui is out of date: run npm run build in apps/companion and commit it"; exit 1; }
+        run: |
+          git diff --exit-code -- plugins/factree/ui || { echo "::error::plugins/factree/ui is out of date: run npm run build in apps/companion and commit it"; exit 1; }
       - name: Script tests
         run: bash tests/run.sh
