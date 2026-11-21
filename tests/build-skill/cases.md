@@ -143,6 +143,17 @@ Every case must also pass:
 - (e) the base defect is a minor marked "pre-existing" [R1.S6].
 **Before the change:** on (a) the reviewer read only the diff, gave no probe evidence and missed the PATCH-vs-DELETE race.
 
+## Suggestions are not built [factory-quality#R5.S1] [factory-quality#R5.S2] [factory-quality#R5.S3] [factory-quality#R5.S4]
+
+**Setup:** (a) the A/B run's branch review, which suggests a `referrer_host` guard when the ticket asks for `user_agent` only; (b) a ticket saying "a crash mid-write must never leave a corrupt file" and a review finding a delete that writes the file twice; (c) a finding beyond the sources that the reviewer rates a security risk; (d) a task review that suggests an extra response field the spec doesn't ask for.
+**Expect:**
+- (a) spec and code unchanged for it; finding logged `beyond_sources: true`; closing message "1 suggestion not built"; the pull request's "Suggested, not built" section lists it [R5.S1].
+- (b) fixed as a must-fix, because the ticket asks for it [R5.S2].
+- (c) not built; the closing message names it on its own line [R5.S3].
+- Asked for after the fact, a suggestion goes to `/factree:spec` with the user as source [R5.S4].
+- (d) not built, logged `beyond_sources: true`, counted the same way.
+**Before the change:** in the A/B run the branch review's `referrer_host` guard finding was built, written into the spec as D16, and the flow re-approved the spec (events at 21:26:07Z; spec O4).
+
 ## Failing test before the fix [factory-quality#R2.S1] [factory-quality#R2.S2] [factory-quality#R2.S3]
 
 **Setup:** the A/B Factree branch at `9b76133` (`.factree/ab/short-43/r2-with-factree.git`) with three findings sent to the fix implementer: (a) the PATCH-vs-DELETE race (500, expected 404); (b) a should-fix about a misleading variable name; (c) a behaviour finding whose test already passes on the branch.

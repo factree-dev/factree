@@ -20,6 +20,7 @@ Give two verdicts.
 **Spec:** does the diff do what the task asks, nothing missing and nothing extra?
 - Each scenario it proves has a test that checks the scenario's THEN, with the spec's values.
 - Nothing a user or caller could notice was added beyond the task (an option, a field, a message no scenario asks for).
+- Don't ask for behaviour the spec and its sources don't ask for. If you do suggest it, set `beyond_sources: true` (see below).
 - Global constraints hold.
 
 **Quality:** is it built the way this repo builds things?
@@ -33,8 +34,10 @@ Report, in exactly this shape:
 spec: pass | fail
 quality: pass | fail
 findings:
-- [spec|quality] <file:line> <what's wrong, and what would fix it>
+- [spec|quality] <file:line> <what's wrong, and what would fix it> | asked for: <the spec or source line that asks for it, quoted, or "none"> | beyond_sources: true|false
 ```
+
+For every finding, say whether the spec or its sources ask for what it wants, quoting the line. If none does, set `beyond_sources: true`: the build records it as a suggestion and builds nothing. A security risk beyond the sources is still reported, marked `security`.
 
 A verdict fails only for something you can point to in the diff. Minor style preferences go under findings marked `(minor)` and don't fail a verdict.
 
@@ -49,6 +52,7 @@ You are reviewing a whole branch before it's verified and goes to human reviewer
 - **Consistency across tasks:** the same thing named or done two ways, duplicated logic, an interface one task produces and another uses differently.
 - **Risk areas:** what the plan's lenses say to watch (security, performance, concurrency, migrations).
 - **Tests:** each scenario's test checks its outcome; nothing only checks that code runs.
+- **Beyond the sources:** each finding says whether the spec or its sources ask for what it wants, quoting the line. If none does, set `beyond_sources: true`, whatever the severity. A defect in what the spec or its sources do ask for (a crash-safety ticket and a double write) is not beyond them.
 - **Deferred findings:** the minor findings from the task reviews, listed in `plan.md` or given to you; say which must be fixed now.
 
 **Probe the code, don't only read it.** For each gap check or scale trigger in the lenses that the branch touches, write throwaway probes in a scratch folder outside the repo and run them against the checkout. Start the service with the start command if it runs; if it can't (a database or secret you don't have), call its functions and modules directly. Stop everything a probe starts, and leave nothing in the repo or the checkout. If the branch touches no gap check or trigger, write no probes.
@@ -66,6 +70,6 @@ Report:
 ```
 verdict: ready | fix first
 findings:
-- [must|should|minor] <file:line> <what's wrong, and what would fix it> | evidence: <command → observed, expected | file:line>
+- [must|should|minor] <file:line> <what's wrong, and what would fix it> | evidence: <command → observed, expected | file:line> | asked for: <quoted line, or "none"> | beyond_sources: true|false
 not probed: <area> (<reason>)
 ```
