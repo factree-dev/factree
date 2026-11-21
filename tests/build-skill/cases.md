@@ -131,6 +131,18 @@ Every case must also pass:
 **Expect:** the build stops before verify with `task.failed` for `branch`, and the finding goes to the user.
 
 
+## Branch review probes [factory-quality#R1.S1] [factory-quality#R1.S2] [factory-quality#R1.S3] [factory-quality#R1.S4] [factory-quality#R1.S5] [factory-quality#R1.S6]
+
+**Setup:** fixtures in `.factree/ab/short-43/`: (a) the A/B Factree branch at `9b76133`, before its review fixes (`r2-with-factree.git`); (b) the plain round 2 result (`starter2.git` plus its SHORT-43 commit), whose rate limit holds; (c) a branch on (a) changing only `README.md`; (d) (a) with `dataFile` replaced by a store that needs a database URL the checkout lacks; (e) a branch on `starter2` whose base already lets `/links/:code` 404 vary by case. Run the whole-branch review on each.
+**Expect:**
+- (a) a must-fix with a probe that deletes the link during a slow PATCH body: observed 500, expected 404 [R1.S1].
+- (b) no rate-limit finding when 15 concurrent creates give 10 [R1.S2].
+- Probes and checkout are outside the repo; `git status` of the plan worktree is unchanged [R1.S3].
+- (c) no probes [R1.S4].
+- (d) module-level probes, and a "not probed: <area> (<reason>)" line [R1.S5].
+- (e) the base defect is a minor marked "pre-existing" [R1.S6].
+**Before the change:** on (a) the reviewer read only the diff, gave no probe evidence and missed the PATCH-vs-DELETE race.
+
 ## Self-review and verify logged [live-activity#R4.S2]
 
 **Setup:** a build whose tasks all merge.
