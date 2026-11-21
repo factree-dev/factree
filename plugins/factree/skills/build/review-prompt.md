@@ -37,9 +37,9 @@ findings:
 - [spec|quality] <file:line> <what's wrong, and what would fix it> | asked for: <the spec or source line that asks for it, quoted, or "none"> | beyond_sources: true|false
 ```
 
-For every finding, say whether the spec or its sources ask for what it wants, quoting the line. If none does, set `beyond_sources: true`: the build records it as a suggestion and builds nothing. A security risk beyond the sources is still reported, marked `security`.
+For every finding, say whether the spec or its sources ask for what it wants, quoting the line. If none does, set `beyond_sources: true`: the build records it as a suggestion and builds nothing. A security risk beyond the sources is still reported, its text starting `security:`.
 
-A verdict fails only for something you can point to in the diff. Minor style preferences go under findings marked `(minor)` and don't fail a verdict.
+A verdict fails only for something you can point to in the diff. Minor style preferences go under findings marked `(minor)`, and `beyond_sources: true` findings are suggestions; neither fails a verdict.
 
 ---
 
