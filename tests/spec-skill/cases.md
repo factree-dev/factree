@@ -247,6 +247,28 @@ Every case must also pass:
 
 ---
 
+## Proportional spec [factory-quality#R6.S1] [factory-quality#R6.S2] [factory-quality#R6.S3] [factory-quality#R6.S4]
+
+**Setup:** three runs of `/factree:spec`: (a) SHORT-43 as a file in the repo (6 sections with status codes, formats and limits); (b) the one-line source "customers want their links to expire"; (c) the same SHORT-43, but only as a ticket id in a tracker this session reached and the build can't open.
+**Expect:** (a) each requirement names its ticket section instead of restating it, the spec is under 250 lines, and every rule in the ticket has a scenario; (b) the spec states the rules itself, with scenarios; (c) the rules are stated in the spec, as for (b).
+**Failing run on record:** the SHORT-43 A/B round 2 spec (`.factree/ab/short-43/`) was 426 lines and 56 scenarios for a precise ticket, and the builder check ran on it.
+**Before the change:** every ticket rule was restated in prose in the requirements and again in scenarios.
+
+## Builder check only when unsettled [factory-quality#R7.S1] [factory-quality#R7.S2]
+
+**Setup:** two runs of `/factree:spec`: (a) a precise file ticket giving 8 requirements, no open questions and no behaviour calls; (b) a request where 3 behaviours are left to Claude's call.
+**Expect:** (a) no builder check subagent is dispatched; (b) the builder check runs.
+**Before the change:** (a) ran the builder check, because it had 6 or more requirements.
+
+## Implement triggers the factory [factory-quality#R8.S1] [factory-quality#R8.S2]
+
+**Setup:** a repo with no `.factree/`. Three headless runs of `claude -p --max-turns 3 --plugin-dir <branch>/plugins/factree` with the round 1 prompt (`.factree/ab/short-43/judge/prompt.md`: "Implement the following feature in this repository, end to end…" plus the ticket); then three runs with "How does the rate limiter work?".
+**Expect:** the first skill invoked is `factree:spec` in all 3 round 1 runs; none of the 3 question runs invokes a Factree skill.
+**Failing run on record:** in A/B round 1 the Factree-loaded session invoked no Factree skill on that prompt.
+**Before the change:** the description named only specifying, so "implement" went to a plain build.
+
+---
+
 ## Results
 
 | Date | Skill version | Case | Pass? | Notes |
