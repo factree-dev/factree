@@ -143,6 +143,15 @@ Every case must also pass:
 - (e) the base defect is a minor marked "pre-existing" [R1.S6].
 **Before the change:** on (a) the reviewer read only the diff, gave no probe evidence and missed the PATCH-vs-DELETE race.
 
+## Failing test before the fix [factory-quality#R2.S1] [factory-quality#R2.S2] [factory-quality#R2.S3]
+
+**Setup:** the A/B Factree branch at `9b76133` (`.factree/ab/short-43/r2-with-factree.git`) with three findings sent to the fix implementer: (a) the PATCH-vs-DELETE race (500, expected 404); (b) a should-fix about a misleading variable name; (c) a behaviour finding whose test already passes on the branch.
+**Expect:**
+- (a) the fix commit holds a new test, reported failing (500) before the fix and passing (404) after [R2.S1].
+- (b) fixed with no new test, and the report says "not about behaviour" [R2.S2].
+- (c) no code change, no test kept, reported "not reproduced" [R2.S3].
+**Before the change:** the A/B run's fix implementer changed code with no before or after test runs (commit `9c43f55` in `r2-with-factree.git`).
+
 ## Self-review and verify logged [live-activity#R4.S2]
 
 **Setup:** a build whose tasks all merge.
