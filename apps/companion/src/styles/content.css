@@ -1,0 +1,64 @@
+/* Spec and plan pages (split from styles.css, spec codebase-health). */
+
+/* Spec content */
+.content { padding: 14px 20px 32px; display: flex; flex-direction: column; gap: 14px; }
+.crumbs { font-size: 12px; color: var(--faint); }
+h1.title { margin: 0; font-size: 22px; font-weight: 600; letter-spacing: -0.01em; line-height: 1.2; text-wrap: balance; }
+.purpose { margin: 0; color: var(--muted); font-size: 14px; max-width: 80ch; line-height: 1.5; }
+.meta { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; font-size: 12px; color: var(--faint); }
+.status-badge { display: inline-flex; align-items: center; gap: 5px; padding: 1px 8px 1px 6px; border-radius: 4px; font-weight: 600; font-size: 12px; }
+.status-badge.needs_you { background: var(--accent-bg); color: var(--accent-text); }
+.status-badge.writing { background: var(--info-bg); color: var(--info-text); }
+.status-badge.draft { background: var(--surface-2); color: var(--muted); }
+.status-badge.approved { background: var(--ok-bg); color: var(--ok-text); }
+.status-badge.live { background: var(--info-bg); color: var(--info-text); }
+
+/* Plan (spec plan-view) */
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* A vertical's Design | Tasks sub-tabs (plan-view R12): quieter than the tabs above, full width below. */
+.plan-vertical { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.subtabs { display: flex; gap: 2px; padding: 2px; align-self: flex-start; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--bg-sunk); }
+.subtab { padding: 3px 12px; border-radius: 4px; color: var(--muted); text-decoration: none; font-weight: 500; display: inline-flex; gap: 6px; align-items: baseline; }
+.subtab:hover { color: var(--text); }
+.subtab[aria-current="page"] { background: var(--surface-2); color: var(--text); }
+.plan-design .md-section { max-width: 110ch; }
+.task-fields { display: flex; flex-direction: column; gap: 2px; font-size: 13px; color: var(--text-2); }
+.task-fields b { font-size: 12px; font-weight: 600; color: var(--faint); margin-right: 6px; }
+.task-fields .flag { align-self: flex-start; }
+.foundation { color: var(--muted); }
+.task-part { border-top: 1px solid var(--line); padding-top: 6px; display: flex; flex-direction: column; gap: 6px; }
+.task-part summary { cursor: pointer; font-size: 12px; font-weight: 600; color: var(--muted); letter-spacing: 0.04em; text-transform: uppercase; }
+.task-part[open] > summary { margin-bottom: 4px; }
+.req-tasks { font-size: 12px; color: var(--muted); }
+
+/* Spec page tabs (spec-tabs): same .tabs as the plan page; a question waiting on you marks its tab. */
+.tab.attention { color: var(--accent-text); }
+.tab.attention::after { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); align-self: center; }
+.tab-body { display: flex; flex-direction: column; gap: 8px; padding: 12px; background: var(--surface); border: 1px solid var(--line-strong); border-radius: 0 0 6px 6px; min-width: 0; }
+
+/* Inside the container, sections are part of it rather than boxes of their own; cards stand out a step darker. */
+.tab-body > .panel { background: transparent; border: none; padding: 0; }
+.tab-body .card, .tab-body .panel .panel { background: var(--bg); }
+.tab-body .col-side .panel { background: var(--bg); }
+
+/* Plan diagrams (plan-diagrams R5) */
+.diagram { margin: 0; display: flex; flex-direction: column; gap: 4px; padding: 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); overflow-x: auto; }
+.diagram svg { max-width: 100%; height: auto; display: block; margin: 0 auto; }
+.diagram details summary { cursor: pointer; font-size: 12px; color: var(--faint); }
+.diagram.failed .flag { align-self: flex-start; }
+.diagram-pending { opacity: 0.5; }
+
+/* Build tab (build R8): status as text first, colour second. */
+.build-status { font-size: 12px; font-weight: 600; padding: 0 6px; border-radius: 4px; border: 1px solid var(--line-strong); color: var(--muted); }
+.build-status.running { color: var(--info-text); border-color: var(--info); }
+.build-status.done { color: var(--ok-text); border-color: var(--ok-line); background: var(--ok-bg); }
+.build-status.failed, .build-status.blocked { color: var(--accent-text); border-color: var(--accent-line); background: var(--accent-bg); }
+
+/* Verify tab (verify R4) */
+.verify-status { font-size: 12px; font-weight: 600; padding: 0 6px; border-radius: 4px; border: 1px solid var(--line-strong); color: var(--muted); }
+.verify-status.proved { color: var(--ok-text); border-color: var(--ok-line); background: var(--ok-bg); }
+.verify-status.failing { color: var(--accent-text); border-color: var(--accent-line); background: var(--accent-bg); }
+
+/* solid, no hatching (spec-ring D6) */
+@keyframes ring-breathe { 50% { opacity: .6; } }

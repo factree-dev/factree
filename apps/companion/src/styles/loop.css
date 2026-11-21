@@ -1,0 +1,79 @@
+/* The loop line (split from styles.css, spec codebase-health). */
+
+/* Tabs sit on a bordered container; the selected tab shares its background and opens into it. */
+.tabbed { display: flex; flex-direction: column; min-width: 0; }
+.tabs { display: flex; gap: 4px; flex-wrap: wrap; position: relative; z-index: 1; }
+.tab { padding: 5px 12px; margin-bottom: -1px; border: 1px solid var(--line-strong); border-radius: 6px 6px 0 0; background: var(--bg-sunk); color: var(--muted); text-decoration: none; font-weight: 500; display: inline-flex; gap: 6px; align-items: baseline; justify-content: center; flex: 1 1 0; min-width: max-content; }
+.tab:hover { color: var(--text); border-color: var(--faint); border-bottom-color: var(--line-strong); }
+.tab[aria-current="page"], .tab[aria-current="page"]:hover { color: var(--text); background: var(--surface); border-color: var(--line-strong); border-bottom-color: var(--surface); }
+.plan-chip { text-decoration: none; }
+.plan-chip.current { border-color: var(--accent-line); color: var(--text); }
+.flag { font-size: 12px; color: var(--accent-text); background: var(--accent-bg); border: 1px solid var(--accent-line); padding: 0 6px; border-radius: 4px; white-space: nowrap; }
+.md { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.md-section { display: flex; flex-direction: column; gap: 6px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.md-section:last-child { border-bottom: none; }
+.md-section-h { margin: 0; font-size: 14px; font-weight: 600; }
+.md-h { margin: 4px 0 0; font-size: 12px; font-weight: 600; color: var(--muted); letter-spacing: 0.04em; text-transform: uppercase; }
+.md-p { margin: 0; line-height: 1.5; color: var(--text-2); max-width: 90ch; }
+.md-list { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; color: var(--text-2); line-height: 1.5; }
+.md-list li.check { list-style: none; margin-left: -18px; display: flex; gap: 8px; align-items: flex-start; }
+.li-body { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1; }
+.tick { flex: none; width: 14px; height: 14px; margin-top: 3px; border-radius: 3px; border: 1px solid var(--line-strong); font-size: 10px; display: inline-flex; align-items: center; justify-content: center; }
+.check.done .tick { background: var(--ok-bg); border-color: var(--ok-line); color: var(--ok-text); }
+.check.done > .li-body { color: var(--muted); }
+.md-code { margin: 0; padding: 8px 10px; border-radius: 6px; background: var(--bg-sunk); border: 1px solid var(--line); overflow-x: auto; font-family: var(--mono); font-size: 12px; line-height: 1.5; color: var(--text-2); }
+.md-code code { overflow-wrap: normal; white-space: pre; }
+.md-table-wrap { overflow-x: auto; max-width: 100%; }
+.md-table { border-collapse: collapse; width: 100%; font-size: 13px; }
+.md-table th, .md-table td { text-align: left; vertical-align: top; padding: 4px 8px; border-bottom: 1px solid var(--line); }
+.md-table th { font-size: 12px; font-weight: 600; color: var(--muted); }
+
+/* The ring (spec-ring): a left column with the ring and the stage list stacked under it, the stage page beside it. */
+.loop-main { min-width: 0; }
+
+/* The loop line at the top (spec-ring R1, D8): the ring's look, straightened. */
+.loop-band { padding: 14px 20px 12px; border-bottom: 1px solid var(--line); background: var(--bg-sunk); }
+.loop-line { display: flex; flex-wrap: wrap; flex-direction: column; align-items: stretch; gap: 10px; }
+.loop-bar { display: flex; min-width: 0; flex: none; }
+.loop-link { flex: 1; display: flex; flex-direction: column; gap: 6px; color: inherit; text-decoration: none; min-width: 0; }
+a.loop-link { cursor: pointer; }
+/* Stations (spec-ring D13): each stage is the track leading into it, then its station; Spec has no track. */
+.loop-link:first-child { flex: none; width: 18px; }   /* just its station, so the track starts right after it (R1.S8); the label overhangs */
+.loop-stop { display: flex; align-items: center; height: 22px; }
+.loop-track { position: relative; flex: 1; height: 4px; background: var(--fill); overflow: hidden; }
+.loop-link:first-child .loop-track { display: none; }
+.loop-seg { position: absolute; top: 0; bottom: 0; left: 0; transition: width .8s; }
+.loop-seg.done { background: var(--ok); }
+.loop-seg.running { background: var(--info); }
+.loop-seg.waiting { background: var(--accent); }
+.loop-seg.stale { background: var(--line-strong); }
+.loop-seg.idle { background: var(--faint); }
+.loop-node { position: relative; flex: none; box-sizing: border-box; width: 18px; height: 18px; border-radius: 50%; border: 3px solid var(--fill); background: var(--bg-sunk); }
+a.loop-link:hover .loop-node.idle { border-color: var(--fill-hover); }
+.loop-node.done { background: var(--ok); border-color: var(--ok); }
+.loop-node.done::before { content: "✓"; position: absolute; inset: 0; display: grid; place-items: center; font-size: 10px; font-weight: 800; color: var(--bg-sunk); }
+.loop-node.running { background: var(--info); border-color: var(--info); color: var(--info); }
+.loop-node.waiting { background: var(--accent); border-color: var(--accent); color: var(--accent); }
+.loop-node.stale { background: var(--line-strong); border-color: var(--line-strong); }
+/* The active station sends out ripples, blue while running and orange while waiting on the user (spec-ring R1.S6, R1.S7). */
+.loop-node.running::after, .loop-node.waiting::after { content: ""; position: absolute; inset: -3px; border-radius: 50%; border: 2px solid currentColor; animation: loop-ripple 1.6s ease-out infinite; }
+@keyframes loop-ripple { from { transform: scale(1); opacity: .9; } to { transform: scale(2.6); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .loop-node.running::after, .loop-node.waiting::after { animation: none; } }
+.loop-label { position: relative; align-self: flex-end; transform: translateX(calc(50% - 9px)); white-space: nowrap; font-size: 12px; font-weight: 600; color: var(--faint); }
+.loop-label.done { color: var(--ok-text); }
+.loop-label.running { color: var(--info-text); }
+.loop-label.waiting { color: var(--accent-text); }
+.loop-open { position: absolute; left: 0; bottom: -4px; height: 2px; width: 100%; max-width: 3.4em; background: var(--text); }
+.loop-summary { display: flex; gap: 10px; flex: none; align-items: baseline; }
+.loop-pct { font-size: 26px; font-weight: 700; line-height: 1; }
+.loop-pct small { font-size: 13px; color: var(--faint); }
+.loop-now { font-size: 13px; color: var(--text-2); }
+.loop-now.waiting { color: var(--accent-text); }
+.loop-round { font: 600 10px var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--accent-text); background: var(--accent-bg); border-radius: 4px; padding: 0 6px; align-self: center; }
+@media (max-width: 700px) { .loop-summary { flex-basis: 100%; } }
+
+/* The round, percentage and status under the line; the list's status lines flush left (spec-ring D10). */
+.spec-link > .stage-line { grid-column: 1 / -1; }
+
+/* The round comes last, in the same style as the status (spec-ring D11). */
+.loop-summary .loop-round { font: inherit; font-size: 13px; letter-spacing: 0; text-transform: none; color: var(--text-2); background: none; padding: 0; border-radius: 0; align-self: auto; }

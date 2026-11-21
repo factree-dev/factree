@@ -1,0 +1,34 @@
+{
+  "name": "@factree/companion",
+  "private": true,
+  "version": "0.5.0",
+  "type": "module",
+  "description": "Local Factree UI: shows a workspace's specs and what each Claude Code session is doing.",
+  "scripts": {
+    "dev": "concurrently -k -n server,ui \"npm:dev:server\" \"npm:dev:ui\"",
+    "dev:server": "node --watch --experimental-strip-types server/index.ts --workspace ../../tests/fixtures/workspace --port 4748",
+    "dev:ui": "vite",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "build": "vite build && vite build --ssr server/index.ts --outDir dist/server && node scripts/copy-to-plugin.mjs",
+    "demo": "node scripts/record-demo.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "mermaid": "12.2.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.3.0",
+    "concurrently": "^10.0.7",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.8",
+    "vitest": "^5.1.0"
+  }
+}

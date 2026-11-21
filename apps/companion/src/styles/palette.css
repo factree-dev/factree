@@ -1,0 +1,27 @@
+/* The search palette (split from styles.css, spec codebase-health). */
+
+/* Search palette (spec search): centred over the page, keyboard first. */
+.palette-backdrop { position: fixed; inset: 0; z-index: 50; background: rgba(0, 0, 0, 0.55); display: flex; justify-content: center; align-items: flex-start; padding-top: 12vh; }
+.palette { width: min(680px, calc(100vw - 32px)); max-height: 70vh; display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--line-strong); border-radius: 10px; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.7); overflow: hidden; }
+.palette-input { font: inherit; font-size: 16px; padding: 14px 16px; background: transparent; border: none; border-bottom: 1px solid var(--line); color: var(--text); outline: none; }
+.palette-list { list-style: none; margin: 0; padding: 6px; overflow-y: auto; }
+.palette-group { font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faintest); padding: 8px 10px 4px; }
+.palette-row { display: flex; align-items: baseline; gap: 10px; padding: 7px 10px; border-radius: 6px; cursor: pointer; min-width: 0; }
+.palette-row.selected { background: var(--surface-2); }
+.palette-kind { font-size: 11px; color: var(--faint); width: 82px; flex: none; }
+.palette-id { font-size: 12px; color: var(--accent-link); flex: none; }
+.palette-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+.palette-title mark { background: none; color: var(--accent-text); font-weight: 600; }
+.palette-context { font-size: 12px; color: var(--faint); flex: none; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.palette-empty { padding: 14px 10px; color: var(--faint); }
+.palette-foot { border-top: 1px solid var(--line); padding: 7px 14px; font-size: 12px; color: var(--faint); }
+.palette-foot b { font-family: var(--mono); font-weight: 500; color: var(--muted); }
+.spec-link .waiting-count { margin-left: auto; font-family: var(--sans, inherit); font-size: 11px; font-weight: 600; color: var(--accent-text); background: var(--accent-bg); padding: 0 6px; border-radius: 4px; white-space: nowrap; }
+.waiting-line { display: flex; align-items: center; gap: 10px; margin: 14px 20px 0; padding: 7px 12px; border-radius: 6px; border: 1px solid var(--accent-line); background: var(--accent-bg); color: var(--accent-text); font-weight: 600; text-decoration: none; }
+.waiting-line span { margin-left: auto; font-weight: 500; }
+.waiting-line:hover { color: var(--text); }
+.sketch { margin: 0; font-family: var(--mono); font-size: 13px; line-height: 1.5; white-space: pre; overflow-x: auto; color: var(--text); }
+.dchange { font-size: 13px; color: var(--text-2); padding: 6px 10px; border-radius: 6px; background: var(--bg); border: 1px solid var(--line); }
+.dkind.lesson { color: var(--info-text); }
+.review-state.changes_requested { color: var(--accent-text); }
+.review-state.approved, .review-state.merged { color: var(--ok-text); }

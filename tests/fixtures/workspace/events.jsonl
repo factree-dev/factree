@@ -1,0 +1,14 @@
+{"ts":"2026-11-15T14:02:11Z","type":"spec.created","spec":"link-report","actor":"John Doe","data":{"requirements":4,"sources":["JIRA-482"]}}
+{"ts":"2026-11-15T14:05:40Z","type":"question.opened","spec":"link-report","actor":"John Doe","data":{"id":"Q1"}}
+{"ts":"2026-11-15T14:06:02Z","type":"question.opened","spec":"link-report","actor":"John Doe","data":{"id":"Q2"}}
+{"ts":"2026-11-15T14:21:19Z","type":"decision.recorded","spec":"link-report","actor":"John Doe","data":{"id":"D1","by":"Priya"}}
+{"ts":"2026-11-15T14:21:19Z","type":"question.resolved","spec":"link-report","actor":"John Doe","data":{"id":"Q1","by":"D1"}}
+{"ts":"2026-11-15T14:24:51Z","type":"spec.approved","spec":"link-report","actor":"John Doe","data":{"by":"John Doe"}}
+{"ts":"2026-11-15T15:02:40Z","type":"plan.created","work":"001-link-report","actor":"John Doe","data":{"spec":"link-report","scope":["R1","R2","R3","R4"]}}
+{"ts":"2026-11-15T15:31:12Z","type":"plan.design_approved","work":"001-link-report","actor":"John Doe","data":{"by":"John Doe","new_patterns":[]}}
+{"ts":"2026-11-15T15:31:30Z","type":"decision.recorded","spec":"link-report","actor":"John Doe","data":{"id":"D4","by":"John Doe","from":"001-link-report"}}
+{"ts":"2026-11-15T15:48:05Z","type":"plan.approved","work":"001-link-report","actor":"John Doe","data":{"by":"John Doe","tasks":4}}
+{"ts":"2026-11-16T09:02:10Z","type":"spec.updated","spec":"link-report","actor":"John Doe","data":{"added":["R5","R6"],"changed":[],"retired":[]}}
+{"ts":"2026-11-16T09:20:44Z","type":"plan.created","work":"002-link-report","actor":"John Doe","data":{"spec":"link-report","scope":["R5","R6"],"verticals":["backend","frontend"]}}
+{"ts":"2026-11-16T09:31:05Z","type":"plan.design_approved","work":"002-link-report","actor":"John Doe","data":{"by":"John Doe","new_patterns":[]}}
+{"ts":"2026-11-16T09:40:18Z","type":"plan.approved","work":"002-link-report","actor":"John Doe","data":{"by":"John Doe","tasks":2}}

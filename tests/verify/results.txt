@@ -1,0 +1,5 @@
+pass	passes [demo#R1.S1]
+pass	first of two [demo#R1.S2]
+fail	second of two [demo#R1.S2]
+pass	shared with another spec [demo#R1.S1] [other#R1.S1]
+pass	unrelated test

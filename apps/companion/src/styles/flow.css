@@ -1,0 +1,36 @@
+/* The Flow tab (split from styles.css, spec codebase-health). */
+
+/* The Flow tab (spec-flow): cards, arrows coloured by their scenarios, gaps dashed, a scenario played along its path. */
+.flow-view { display: grid; grid-template-columns: minmax(0, 1fr) 240px; gap: 12px; }
+.flow-canvas { overflow-x: auto; background: var(--bg); border-radius: 8px; }
+.flow-canvas svg { display: block; }
+.fcard rect { fill: var(--surface-2); }
+.fcard text { fill: var(--text); font: 600 13px var(--font); }
+.fcard.now rect { fill: var(--accent-bg); stroke: var(--accent); stroke-width: 2; }
+.fcard.lit rect { stroke: var(--accent-line); stroke-width: 1.5; }
+.fcard.dim { opacity: 0.4; }
+.edge { fill: none; stroke: var(--faint); stroke-width: 1.6; }
+.edge.ok { stroke: var(--ok); }
+.edge.bad { stroke: var(--bad, #e5534b); }
+.edge.none { stroke-dasharray: 5 4; }
+.edge.gap { stroke: var(--accent); stroke-dasharray: 2 4; }
+.edge.lit { stroke-width: 3; }
+.flabel rect { fill: var(--surface-2); }
+.flabel text { fill: var(--text-2); font: 11px var(--font); }
+.flabel.ok text { fill: var(--ok-text); }
+.flabel.gap text { fill: var(--accent-text); }
+.flow-side { display: flex; flex-direction: column; gap: 12px; }
+.flow-scns, .flow-gaps { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.flow-scn { width: 100%; display: flex; gap: 8px; align-items: center; padding: 5px 8px; border: none; border-radius: 6px; background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.flow-scn:hover { background: var(--surface-2); }
+.flow-scn.sel { background: var(--fill); }
+.fdot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--line-strong); }
+.fdot.proved { background: var(--ok); }
+.fdot.failing { background: var(--bad, #e5534b); }
+.flow-gaps li { font-size: 12px; color: var(--accent-text); padding: 3px 8px; }
+.flow-strip { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, 1fr) auto; gap: 8px; }
+.fstep { background: var(--surface-2); border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 2px; opacity: 0.45; }
+.fstep.on { opacity: 1; }
+.fstep b { font: 600 11px var(--mono); color: var(--muted); }
+.fcontrols { display: flex; align-items: center; }
+@media (max-width: 900px) { .flow-view { grid-template-columns: 1fr; } }

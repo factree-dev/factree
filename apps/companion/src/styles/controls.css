@@ -1,0 +1,35 @@
+/* Buttons, copy, spinners and live activity (split from styles.css, spec codebase-health). */
+
+/* Buttons and copy: no borders; told apart by fill. Primary (accent) for the one action that moves on,
+   plain .btn a soft grey fill, .ghost no fill until hovered. */
+.btn { min-height: 28px; padding: 0 12px; border-radius: 6px; border: none; background: var(--fill); color: var(--text); cursor: pointer; font: inherit; font-weight: 500; display: inline-flex; align-items: center; gap: 6px; transition: background-color 0.12s, color 0.12s; }
+a.btn { text-decoration: none; }   /* a link styled as a button reads as one: no underline */
+.btn:hover { background: var(--fill-hover); }
+.btn:focus-visible, .search-open:focus-visible { outline: 2px solid var(--accent-line); outline-offset: 2px; }
+.btn.primary { background: var(--accent); color: var(--bg); font-weight: 600; }
+.btn.primary:hover { background: var(--accent-link); }
+.btn.ghost { background: transparent; color: var(--text-2); }
+.btn.ghost:hover { background: var(--fill); color: var(--text); }
+.btn kbd { border: none; border-radius: 4px; padding: 0 5px; background: rgba(255, 255, 255, 0.07); color: var(--muted); }
+.copy { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.copy code { padding: 3px 8px; border-radius: 4px; background: var(--bg); border: 1px solid var(--line-strong); color: var(--text-2); overflow-x: auto; max-width: 100%; white-space: nowrap; }
+.copied { font-size: 12px; color: var(--ok-text); }
+
+/* Live activity (live-activity R1): a moving ellipsis while work runs. */
+.activity { color: var(--info-text); }
+.ellipsis i { font-style: normal; animation: ellipsis-dot 1.2s infinite; opacity: 0.2; }
+.ellipsis i:nth-child(2) { animation-delay: 0.2s; }
+.ellipsis i:nth-child(3) { animation-delay: 0.4s; }
+@keyframes ellipsis-dot { 0%, 60%, 100% { opacity: 0.2; } 30% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .ellipsis i { animation: none; opacity: 1; } }
+.search-open { cursor: pointer; color: var(--faint); font: inherit; text-align: left; }
+.search-open .search-label { flex: 1; }
+.search-open:hover { color: var(--text); }
+
+/* A spinner while busy (live-activity R5). */
+.spinner { flex: none; color: var(--info); animation: spin 0.9s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }
+
+/* The key hint on a filled button: dark on the accent, like its text. */
+.btn.primary kbd { background: rgba(0, 0, 0, 0.18); color: var(--bg); font-weight: 600; }

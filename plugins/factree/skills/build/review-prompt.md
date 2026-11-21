@@ -1,0 +1,65 @@
+# Task review prompt
+
+Fill in `<…>` and give this to one fresh reviewer per task, after the build has measured the task and rerun its tests, before it merges (building R3). Name its model (building R6).
+
+---
+
+You are reviewing one task of an approved plan before it merges. You haven't seen the work being done; judge only what's in front of you.
+
+- **Task:** `<workspace>/work/<work>/<vertical>/tasks.md`, `<T<n>: title>`: what it was asked to do, its Files, Interfaces and Steps.
+- **Scenarios it proves:** in `<workspace>/specs/<spec>.md`: `<spec>#R<n>.S<n>`, …
+- **Design:** `<workspace>/work/<work>/<vertical>/design.md`: the patterns it must follow, each with the repo path that shows it.
+- **Global constraints:** `<copied from plan.md>`
+- **Diff:** `<diff file>` (commits, stat and full diff with context). Read it once; open other files only to check a risk you can name, and say which.
+- **Implementer's report:** `<report>`. Treat it as claims to check against the diff, including any reason it gives for a choice.
+
+Don't change anything, don't run the whole suite again (the build already did), and don't start other agents.
+
+Give two verdicts.
+
+**Spec:** does the diff do what the task asks, nothing missing and nothing extra?
+- Each scenario it proves has a test that checks the scenario's THEN, with the spec's values.
+- Nothing a user or caller could notice was added beyond the task (an option, a field, a message no scenario asks for).
+- Global constraints hold.
+
+**Quality:** is it built the way this repo builds things?
+- It follows the design's cited patterns rather than a new way of its own.
+- Tests check behaviour, not mocks: a test that only asserts a mock was called fails this.
+- Names match the task's Interfaces; no dead code, no leftover debugging, nothing the task didn't need.
+
+Report, in exactly this shape:
+
+```
+spec: pass | fail
+quality: pass | fail
+findings:
+- [spec|quality] <file:line> <what's wrong, and what would fix it>
+```
+
+A verdict fails only for something you can point to in the diff. Minor style preferences go under findings marked `(minor)` and don't fail a verdict.
+
+---
+
+## Branch
+
+Use this section instead of the task review when every task has merged (building R9). Give the reviewer the branch diff file (from the merge base with the plan's base branch), `plan.md` and the spec.
+
+You are reviewing a whole branch before it's verified and goes to human reviewers. Each task was already reviewed alone; look for what only shows across the whole branch:
+- **The spec, end to end:** every in-scope scenario is delivered, and nothing a user or caller could notice was added beyond them.
+- **Consistency across tasks:** the same thing named or done two ways, duplicated logic, an interface one task produces and another uses differently.
+- **Risk areas:** what the plan's lenses say to watch (security, performance, concurrency, migrations).
+- **Tests:** each scenario's test checks its outcome; nothing only checks that code runs.
+- **Deferred findings:** the minor findings from the task reviews, listed in `plan.md` or given to you; say which must be fixed now.
+
+Give each finding a severity:
+- **must fix:** wrong behaviour, a scenario not delivered, a security or data-loss risk, a broken interface between tasks;
+- **should fix:** inconsistency or a gap a reviewer would ask about, a weak test for a scenario;
+- **minor:** everything else. Nitpicks and style preferences are always minor.
+
+Report:
+
+```
+verdict: ready | fix first
+findings:
+- [must|should|minor] <file:line> <what's wrong, and what would fix it>
+```

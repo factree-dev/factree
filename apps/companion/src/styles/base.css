@@ -1,0 +1,107 @@
+/* Theme, page and layout (split from styles.css, spec codebase-health). */
+
+/* Factree UI: terminal-black theme, dense. One accent (terracotta) means "waiting on you". */
+:root { --bg: #0b0b0c;
+  --bg-sunk: #08080a;
+  --surface: #111214;
+  --surface-2: #17181b;
+  --line: #1e1f23;
+  --line-strong: #2a2b30;
+  --fill: #202126;         /* buttons: a soft fill instead of a border */
+  --fill-hover: #2a2b31;
+  --text: #e8e8ea;
+  --text-2: #d2d2d6;
+  --muted: #aeaeb4;
+  --faint: #93939a;
+  --faintest: #85858c;
+  --accent: #e07a5a;
+  --accent-text: #f2a68b;
+  --accent-link: #ec916f;
+  --accent-bg: #23140f;
+  --accent-line: #5a3022;
+  --ok: #6cc27a;
+  --ok-text: #9fdfa8;
+  --ok-bg: #0f2314;
+  --ok-line: #2b5233;
+  --info: #6aa6f0;
+  --info-text: #a6c8f5;
+  --info-bg: #0f1b2c;
+  --font: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --header-h: 41px;
+  color-scheme: dark; }
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--text); }
+body { font-family: var(--font); font-size: 13px; line-height: 1.45; }
+a { color: var(--accent-link); }
+a:hover { color: var(--accent-text); }
+button { font: inherit; color: inherit; }
+code, .mono { font-family: var(--mono); font-size: 0.92em; }
+
+/* Long paths and IDs wrap instead of pushing panels wider than their column. */
+code { overflow-wrap: anywhere; }
+.card, .panel, .list li, .oq, .s-steps span { min-width: 0; overflow-wrap: anywhere; }
+a.code-link { text-decoration: none; }
+a.code-link code { color: var(--accent-link); border-bottom: 1px dotted currentColor; }
+a.code-link:hover code { color: var(--accent-text); }
+a.ref { text-decoration: none; border-bottom: 1px dotted currentColor; }
+a.req-id { text-decoration: none; }
+
+/* The item a link jumped to. */
+.flash { animation: flash 1.6s ease-out; }
+@keyframes flash { from { box-shadow: 0 0 0 2px var(--accent-line); background-color: var(--accent-bg); } to { box-shadow: 0 0 0 2px transparent; } }
+[id^="ref-"] { scroll-margin: 64px; }
+::selection { background: var(--accent-line); }
+:focus-visible { outline: 1px solid var(--faint); outline-offset: 1px; border-radius: 4px; }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+.app { min-height: 100vh; display: flex; flex-direction: column; }
+
+/* Header */
+.header { display: flex; align-items: center; gap: 12px; padding: 6px 16px; min-height: var(--header-h); border-bottom: 1px solid var(--line); background: var(--bg-sunk); flex-wrap: wrap; position: sticky; top: 0; z-index: 10; }
+.brand { display: flex; align-items: center; gap: 8px; color: var(--text); text-decoration: none; font-weight: 600; font-size: 13px; }
+.workspace-path { font-family: var(--mono); font-size: 12px; color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 40ch; }
+.spacer { flex: 1; }
+.filter { display: flex; align-items: center; gap: 6px; min-height: 28px; padding: 0 8px; border: none; border-radius: 6px; background: var(--fill); color: var(--faint); min-width: 220px; }
+.filter input { flex: 1; background: none; border: none; color: var(--text); font: inherit; outline: none; min-width: 0; }
+.filter input::placeholder { color: var(--faint); }
+.kbd { font-family: var(--mono); font-size: 11px; border: 1px solid var(--line-strong); border-radius: 4px; padding: 0 5px; color: var(--muted); }
+.dot { width: 7px; height: 7px; border-radius: 50%; flex: none; display: inline-block; }
+.conn { font-size: 12px; color: var(--faint); display: flex; align-items: center; gap: 6px; }
+
+/* Layout */
+.body { display: flex; flex: 1; align-items: flex-start; position: relative; }
+
+/* The spec list (companion-layout R1–R3): its own width and scroll, pinned under the header. */
+.sidebar { flex: 0 0 var(--sidebar-w, 280px); width: var(--sidebar-w, 280px); position: sticky; top: var(--header-h); height: calc(100vh - var(--header-h)); overflow-y: auto; padding: 10px 6px; display: flex; flex-direction: column; gap: 1px; background: var(--bg-sunk); }
+.sidebar > * { flex-shrink: 0; }
+.resizer { flex: none; width: 5px; margin-left: -2px; margin-right: -3px; position: sticky; top: var(--header-h); height: calc(100vh - var(--header-h)); cursor: col-resize; z-index: 4; background: linear-gradient(to right, transparent 2px, var(--line) 2px, var(--line) 3px, transparent 3px); touch-action: none; }
+.resizer:hover, .resizer:focus-visible, body.resizing .resizer { background: linear-gradient(to right, transparent 1px, var(--accent) 1px, var(--accent) 4px, transparent 4px); outline: none; }
+body.resizing { cursor: col-resize; user-select: none; }
+.main { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; }
+.label { font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faintest); padding: 2px 8px 6px; }
+.spec-link { display: flex; flex-direction: column; gap: 1px; padding: 5px 8px; border-radius: 5px; text-decoration: none; color: var(--text); }
+.spec-link:hover { background: var(--surface); color: var(--text); }
+.spec-link.active { background: var(--surface-2); }
+.spec-link .id { font-family: var(--mono); font-size: 13px; display: flex; align-items: center; gap: 6px; }
+.new-spec { margin-top: 8px; padding: 6px 8px; border: 1px dashed var(--line-strong); border-radius: 6px; background: transparent; color: var(--faint); text-align: left; cursor: pointer; font-size: 12px; display: flex; flex-direction: column; gap: 4px; }
+.new-spec:hover { border-color: var(--faint); color: var(--muted); }
+
+/* Live panel */
+.question { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; border-radius: 6px; background: var(--bg); border: 1px solid var(--accent-line); }
+.question .proposal { font-size: 13px; color: var(--text-2); padding: 4px 8px; border-radius: 4px; background: var(--surface-2); }
+.answered { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--faint); }
+.answered summary { cursor: pointer; }
+.answered li { color: var(--muted); }
+
+/* The line under a spec id (companion-layout R4): quieter than the id, never uppercase. */
+.spec-link .stage-line { font-size: 12px; color: var(--faint); padding-left: 20px; letter-spacing: 0; text-transform: none; font-weight: 400; }
+.scope { margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.scope dt { font-size: 12px; color: var(--faint); }
+.scope dd { margin: 0; color: var(--text-2); line-height: 1.5; }
+
+/* Sessions (spec-sessions): short id with a resume button, in headers and the Activity tab. */
+.session-chip { display: inline-flex; align-items: center; gap: 6px; }
+.session-chip .copy code, .sessions .copy code { padding: 0 6px; font-size: 12px; }
+.session-chip .btn, .sessions .btn { min-height: 22px; padding: 0 8px; font-size: 12px; }
+.sessions li { display: flex; gap: 8px; align-items: center; }
+.sessions time { font-family: var(--mono); font-size: 12px; color: var(--faintest); width: 60px; flex: none; }

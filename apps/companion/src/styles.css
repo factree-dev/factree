@@ -1,0 +1,9 @@
+/* Factree UI styles, one file per area (spec codebase-health R5), in cascade order. */
+@import "./styles/base.css";
+@import "./styles/controls.css";
+@import "./styles/content.css";
+@import "./styles/sidebar.css";
+@import "./styles/loop.css";
+@import "./styles/decisions.css";
+@import "./styles/palette.css";
+@import "./styles/flow.css";

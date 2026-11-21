@@ -1,0 +1,16 @@
+{
+  "name": "api",
+  "scripts": {
+    "test": "vitest run",
+    "test:perf": "vitest run test/perf"
+  },
+  "dependencies": {
+    "express": "^4.19.0",
+    "knex": "^3.1.0",
+    "csv-stringify": "^6.4.0"
+  },
+  "devDependencies": {
+    "vitest": "^1.6.0",
+    "supertest": "^7.0.0"
+  }
+}
