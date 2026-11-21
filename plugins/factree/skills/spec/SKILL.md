@@ -1,6 +1,6 @@
 ---
 name: spec
-description: Turn a requirement into a Factree spec — from a ticket, Confluence page, task, list of requirements or plain conversation. Use when the user wants to specify a feature or change before building it, or to update an existing spec. Use also when the user asks to implement, build or add a ticket, feature or change. Writes .factree/specs/<capability>.md; never writes product code.
+description: Factree builds every feature through a spec first. Use this before writing any code whenever the user asks to implement, build, add or change a feature, ticket or behaviour in a repository (pasted tickets included), and when they want to specify a feature or update an existing spec. Turns the requirement into .factree/specs/<capability>.md grounded in the code, then the flow plans, builds and verifies it. Not for questions about how code works.
 argument-hint: "[requirement text, file path, URL or ticket id]"
 ---
 
