@@ -176,6 +176,7 @@ waiting demo
 decided question.answered demo '{"n":3,"answer":"Beside each id","by":"John Doe","via":"companion"}'
 for i in 1 2 3 4 5 6 7 8 9 10; do kill -0 $wpid 2>/dev/null || break; sleep 0.3; done
 check "the wait ends with the companion's answer [companion-decisions#R8.S1]" '! kill -0 $wpid 2>/dev/null && grep -q "^Decided in the Factree companion:$" "$tmp/out" && grep -q "^- demo question 3: Beside each id (John Doe)$" "$tmp/out"'
+sleep 1.1   # the next wait starts after that answer's second, or it counts the answer again (ci R1.S4)
 waiting demo
 decided spec.approved other '{"by":"John Doe","via":"companion"}'
 decided question.answered demo '{"n":4,"answer":"typed in the terminal","by":"John Doe"}'
