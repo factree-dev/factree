@@ -239,6 +239,12 @@ Every case must also pass:
 **Setup:** a git repo with no Factree workspace anywhere above it.
 **Expect:** `/factree:spec Add report export` says "Created a Factree workspace in <repo>/.factree (local only)" and carries on with the spec; `git status` stays clean.
 
+## Lens risks become scenarios [factory-quality#R4.S1] [factory-quality#R4.S2] [factory-quality#R4.S3]
+
+**Setup:** a backend repo. Three runs of `/factree:spec`: (a) "Add PATCH /links/:code to change a link's target"; (b) "Store the User-Agent header on each click and export clicks as CSV"; (c) a source that already says what happens when two requests create the same alias at once, for an alias-creating endpoint.
+**Expect:** (a) a scenario for the link being deleted while the body is still arriving, with the status code the caller gets; (b) a scenario with a header of `Mozillé/5` that the export shows unchanged; (c) the alias race comes from the source, and no extra lens scenario repeats it.
+**Failing run on record:** the SHORT-43 A/B run's spec (`.factree/ab/short-43/`, spec open questions O3 and O7) had neither scenario; the PATCH-during-delete 500 and the mangled header were found only after the build.
+
 ---
 
 ## Results

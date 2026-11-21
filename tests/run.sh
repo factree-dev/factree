@@ -139,7 +139,10 @@ echo "# lenses"
 check "lens README documents Detect [plan-verticals#R13.S1]" 'grep -q "^- \*\*Detect:\*\*" $P/lenses/README.md && grep -q "detect.sh" $P/lenses/README.md && grep -q "^## Generated lenses" $P/lenses/README.md'
 for l in $P/lenses/backend.md $P/lenses/frontend.md $P/lenses/infra.md; do
   check "$(basename $l) has the 7 contract sections" '[ $(grep -c -E "^## (Signals|Patterns to inventory|Gaps to check|Scale triggers|Design sections|Failure handling|Test mapping)$" $l) -eq 7 ]'
+  check "$(basename $l) sections are in contract order [factory-quality#R3.S2]" '[ "$(grep -E "^## (Signals|Patterns to inventory|Gaps to check|Scale triggers|Design sections|Failure handling|Test mapping)$" $l | tr "\n" "|")" = "## Signals|## Patterns to inventory|## Gaps to check|## Scale triggers|## Design sections|## Failure handling|## Test mapping|" ]'
 done
+gaps=$(awk '/^## Gaps to check$/{g=1;next} /^## /{g=0} g' $P/lenses/backend.md)
+check "backend lens asks about stale state and input as sent [factory-quality#R3.S1]" 'echo "$gaps" | grep -q "await" && echo "$gaps" | grep -q "encoding" && ! echo "$gaps" | grep -E "await|encoding" | grep -q -i -E "express|django|rails|spring|node"'
 
 echo "# session hook and events"
 HOOK=$P/scripts/session-hook.sh
