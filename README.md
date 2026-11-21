@@ -1,12 +1,14 @@
 <div align="center">
 
-# 🏭 Factree
+<img src="docs/logo.svg" alt="Factree" width="96">
+
+# Factree
 
 **A self-improving observable software factory for Claude Code.**
 
 You decide. Factree specs, plans, builds, verifies and opens the pull request, stops only when it needs you, and learns from every decision.
 
-[![version](https://img.shields.io/badge/version-0.13.37-black)](plugins/factree/.claude-plugin/plugin.json)
+[![version](https://img.shields.io/badge/version-0.13.38-black)](plugins/factree/.claude-plugin/plugin.json)
 [![Claude Code plugin](https://img.shields.io/badge/Claude%20Code-plugin-d97757)](#install)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![stages](https://img.shields.io/badge/spec%20·%20plan%20·%20build%20·%20verify%20·%20review-working-2ea043)](#status)

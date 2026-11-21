@@ -478,7 +478,7 @@ check "no script over 300 lines [codebase-health#R5.S1]" '[ -z "$(wc -l $P/scrip
 
 
 echo "# readme"
-img=$(grep -o '<img src="[^"]*"' README.md | head -1 | sed 's/<img src="//; s/"$//')
+img=$(grep -o '<img src="[^"]*\.gif"' README.md | head -1 | sed 's/<img src="//; s/"$//')   # the recording; the logo comes first (logo R1)
 check "the recording at the top names a file that exists [readme#R1.S1]" '[ "$img" = "docs/factree-demo.gif" ] && [ -s "$img" ]'
 check "the documented record command exists [readme#R1.S2]" 'grep -q "npm run demo" README.md && grep -q "\"demo\": \"node scripts/record-demo.mjs" apps/companion/package.json && [ -f apps/companion/scripts/record-demo.mjs ]'
 

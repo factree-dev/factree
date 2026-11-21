@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { useWorkspace, decide } from "./api.ts";
 import { Palette } from "./components/Palette.tsx";
 import { isPaletteKey } from "./search.ts";
-import { FactoryIcon, CopyCommand, LinkContext } from "./components/bits.tsx";
+import { Logo, CopyCommand, LinkContext } from "./components/bits.tsx";
 import { waitingCounts } from "./status.ts";
 import { useSidebarWidth } from "./layout.ts";
 import { NO_LINKS, decisionsRedirect, fromLegacyHash, fromLegacyPath, linkTarget, parsePath, type LinkEnv, type Route } from "./links.ts";
@@ -99,7 +99,7 @@ export function App() {
   return (
     <div className="app">
       <header className="header">
-        <a className="brand" href="#"><FactoryIcon /> Factree</a>
+        <a className="brand" href="#"><Logo /> Factree</a>
         {state && <span className="workspace-path" title={state.workspace}>{shortPath(state.workspace)}</span>}
         <div className="spacer" />
         <SearchButton onOpen={() => setSearching(true)} />

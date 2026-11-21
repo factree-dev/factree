@@ -32,14 +32,9 @@ export function Spinner({ size = 14 }: { size?: number }) {
 }
 
 /** A factory: sawtooth roof, chimney, windows. */
-export function FactoryIcon({ size = 22 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="#D97757" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M2 21h20" />
-      <path d="M3 21V11l5 3v-3l5 3v-3l5 3V3h3v18" />
-      <path d="M6.5 17.5h1.5M11 17.5h1.5M15.5 17.5H17" />
-    </svg>
-  );
+/** The Factree logo, the loop, from the same file as the README's (spec logo R1); decorative beside the name. */
+export function Logo({ size = 22 }: { size?: number }) {
+  return <img src="/logo.svg" width={size} height={size} alt="" />;
 }
 
 const STATUS_GLYPHS: Record<StatusIconName, ReactNode> = {
