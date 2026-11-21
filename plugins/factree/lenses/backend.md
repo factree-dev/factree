@@ -24,6 +24,8 @@ Find two or three real examples of each that are relevant to the change, with fi
 - Who may call this, and what happens when someone who may not tries?
 - Is the operation idempotent? What happens on retry or a double submit?
 - What happens when two requests change the same thing at once?
+- Is anything a handler checked before an `await` (reading the body, a database or file call) checked again after it?
+- Is input stored and returned exactly as the client sent it, including its character encoding?
 - What happens to existing data: backfill, migration, or left as is?
 - What happens when a dependency is slow, down or returns an error?
 - Are there limits: page size, payload size, rate limits?

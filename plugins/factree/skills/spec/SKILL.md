@@ -98,7 +98,7 @@ Split the input into atomic statements and sort each one:
 
 **What this workspace has learned** (self-improving R6): if `<workspace>/checklists/spec.md` exists, ask its questions as well as the built-in ones; if `<workspace>/defaults.md` exists, its lines are defaults for your calls (still listed, still overrulable). **Lessons approved earlier** (self-improving R8.S3): at the start of a run, look in `<workspace>/events.jsonl` for `lesson.approved` keys whose change isn't yet in its file (no `<!-- lesson <key>` comment there). Apply each first, as verify's step 5 describes, and say so in one line.
 
-Then find what the requirement is **silent** on. Run through `checklist.md`, plus the **Gaps to check** in each loaded lens (a frontend change gets asked about loading, empty and error states; a backend change about idempotency and concurrency). Note every gap that would change what gets built.
+Then find what the requirement is **silent** on. Run through `checklist.md`, plus the **Gaps to check** in each loaded lens (a frontend change gets asked about loading, empty and error states; a backend change about idempotency and concurrency). Each gap that applies and the source doesn't settle becomes a scenario in step 9, or an open question if the answer isn't clear. A case the source already settles comes from the source, not from a second scenario.
 
 ### 7. Observe current behaviour
 
@@ -140,6 +140,7 @@ If the user says "just write it" or "you decide", stop asking: make the calls, l
 Start from `template.md` for a new spec. Follow factree:spec-format exactly. Writing rules are below under **Writing requirements and scenarios**.
 
 - Every requirement traces to a `Source:` (the requirement, a section of it, or an observation), unless it's a technical necessity you state as such.
+- Lens gap checks that apply become scenarios (step 6); say so in the summary ("added from the backend lens: ...").
 - Every gap you didn't resolve becomes an open question with an owner, and `Blocked by:` on the requirements it blocks.
 - Decisions: only what a person decided in this conversation, or what the user explicitly delegated to you ("you decide" → record it with your name as `Claude, delegated by <user>`).
 - Code: entry points and key modules with paths. "Not built yet." for new capabilities.
