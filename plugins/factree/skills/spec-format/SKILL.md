@@ -100,7 +100,7 @@ Blocked by: Q2
 ```
 
 Rules:
-- The heading is `### Requirement: R<n> <Name>`. The first line under it is the requirement statement, one behaviour, containing SHALL or MUST (SHOULD or MAY only when genuinely optional).
+- The heading is `### Requirement: R<n> <Name>`. The first line under it is the requirement statement, one behaviour, containing SHALL or MUST (SHOULD or MAY only when genuinely optional). It may instead name the source section it implements as its one behaviour ("SHALL behave as SHORT-43 §3 states"), quantified by that section and its scenarios.
 - `Source:` (optional) points to the requirement's origin: an item in `sources`, a section of it, or an observation (`O2`). `Blocked by:` (optional) lists open questions that must be answered before this requirement can be built.
 - Every requirement has at least one scenario. Scenarios cover failure and edge cases, not only the happy path.
 - The heading is `#### Scenario: S<n> <Name>`, where the name says which case it covers. Steps are bullets starting `**GIVEN**`, `**WHEN**`, `**THEN**`, with `**AND**` for extra steps. WHEN and THEN are required; GIVEN is required unless there is genuinely no precondition.

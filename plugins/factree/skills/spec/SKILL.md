@@ -1,6 +1,6 @@
 ---
 name: spec
-description: Turn a requirement into a Factree spec — from a ticket, Confluence page, task, list of requirements or plain conversation. Use when the user wants to specify a feature or change before building it, or to update an existing spec. Writes .factree/specs/<capability>.md; never writes product code.
+description: Factree builds every feature through a spec first. Use this before writing any code whenever the user asks to implement, build, add or change a feature, ticket or behaviour in a repository (pasted tickets included), and when they want to specify a feature or update an existing spec. Turns the requirement into .factree/specs/<capability>.md grounded in the code, then the flow plans, builds and verifies it. Not for questions about how code works.
 argument-hint: "[requirement text, file path, URL or ticket id]"
 ---
 
@@ -98,7 +98,7 @@ Split the input into atomic statements and sort each one:
 
 **What this workspace has learned** (self-improving R6): if `<workspace>/checklists/spec.md` exists, ask its questions as well as the built-in ones; if `<workspace>/defaults.md` exists, its lines are defaults for your calls (still listed, still overrulable). **Lessons approved earlier** (self-improving R8.S3): at the start of a run, look in `<workspace>/events.jsonl` for `lesson.approved` keys whose change isn't yet in its file (no `<!-- lesson <key>` comment there). Apply each first, as verify's step 5 describes, and say so in one line.
 
-Then find what the requirement is **silent** on. Run through `checklist.md`, plus the **Gaps to check** in each loaded lens (a frontend change gets asked about loading, empty and error states; a backend change about idempotency and concurrency). Note every gap that would change what gets built.
+Then find what the requirement is **silent** on. Run through `checklist.md`, plus the **Gaps to check** in each loaded lens (a frontend change gets asked about loading, empty and error states; a backend change about idempotency and concurrency). Each gap that applies and the source doesn't settle becomes a scenario in step 9, or an open question if the answer isn't clear. A case the source already settles comes from the source, not from a second scenario.
 
 ### 7. Observe current behaviour
 
@@ -140,6 +140,8 @@ If the user says "just write it" or "you decide", stop asking: make the calls, l
 Start from `template.md` for a new spec. Follow factree:spec-format exactly. Writing rules are below under **Writing requirements and scenarios**.
 
 - Every requirement traces to a `Source:` (the requirement, a section of it, or an observation), unless it's a technical necessity you state as such.
+- **A source the build can read that states behaviour testably** (exact values, codes, formats, limits): each requirement's statement names the source section it implements instead of restating it; concrete values live in scenarios, one per stated rule plus the cases it leaves unstated (edge cases, lens risks). Any other source, including a tracker only this session reached, is treated like a vague one: state the rules.
+- Lens gap checks that apply become scenarios (step 6); say so in the summary ("added from the backend lens: ...").
 - Every gap you didn't resolve becomes an open question with an owner, and `Blocked by:` on the requirements it blocks.
 - Decisions: only what a person decided in this conversation, or what the user explicitly delegated to you ("you decide" → record it with your name as `Claude, delegated by <user>`).
 - Code: entry points and key modules with paths. "Not built yet." for new capabilities.
@@ -155,7 +157,7 @@ Do all three before showing the user:
 
 1. **Self-review** against `checklist.md`'s final section (the quality checks). Fix what fails.
 2. **Validate the structure:** run `bash <skill>/scripts/validate.sh <workspace>/specs/<id>.md`. Fix every ERROR. Fix WARNINGs unless you have a reason, and mention any you leave.
-3. **Builder check** when the spec has 6 or more requirements, spans more than one area of the code, or the user asks: dispatch a fresh subagent with `builder-check.md` and the spec path. Sort what it raises: already answered (add it to the spec), minor (decide it, note it as your call), or needs the user (bring these in one message, most important first). Without a subagent tool, do this read yourself.
+3. **Builder check** only when the spec has open questions, behaviour calls about what the source didn't settle, a conversation-only source, or the user asks: dispatch a fresh subagent with `builder-check.md` and the spec path. Sort what it raises: already answered (add it to the spec), minor (decide it, note it as your call), or needs the user (bring these in one message, most important first). Without a subagent tool, do this read yourself.
 
 ### 11. Present and get approval
 
@@ -225,8 +227,7 @@ On the first `spec.step` also include `"title"` and `"sources"`, so a spec still
 | The system SHALL be secure. | The export service SHALL refuse export requests from users without the admin role. |
 
 - Name the subject concretely ("the export service", "an admin"), not "the system", when there's a better word.
-- SHALL/MUST by default. SHOULD only when there's room for a justified exception; MAY only for genuinely optional behaviour.
-- Quantify every adjective: numbers, limits, formats, time.
+- SHALL/MUST by default. SHOULD only when there's room for a justified exception; MAY only for genuinely optional behaviour. Quantify every adjective: numbers, limits, formats, time. A requirement may instead name the source section it implements as its one behaviour ("SHALL behave as SHORT-43 §3 states"); that section and its scenarios quantify it.
 
 **A scenario is a concrete case that could become a test.**
 

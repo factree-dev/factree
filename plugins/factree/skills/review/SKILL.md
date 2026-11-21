@@ -66,6 +66,10 @@ Log `bash <plugin>/scripts/event.sh stage.step <spec-id> '{"stage":"review","ste
 
 <each call from this spec and plan, with its id, so reviewers can challenge it>
 </details>
+<details><summary>Suggested, not built</summary>
+
+<each `beyond_sources` finding from the build's reviews, one line each, or omit this section if none>
+</details>
 <details><summary>How to test</summary>
 
 <the project's test command, and how to try the behaviour by hand>

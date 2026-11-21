@@ -131,6 +131,38 @@ Every case must also pass:
 **Expect:** the build stops before verify with `task.failed` for `branch`, and the finding goes to the user.
 
 
+## Branch review probes [factory-quality#R1.S1] [factory-quality#R1.S2] [factory-quality#R1.S3] [factory-quality#R1.S4] [factory-quality#R1.S5] [factory-quality#R1.S6]
+
+**Setup:** fixtures in `.factree/ab/short-43/`: (a) the A/B Factree branch at `9b76133`, before its review fixes (`r2-with-factree.git`); (b) the plain round 2 result (`starter2.git` plus its SHORT-43 commit), whose rate limit holds; (c) a branch on (a) changing only `README.md`; (d) (a) with `dataFile` replaced by a store that needs a database URL the checkout lacks; (e) a branch on `starter2` whose base already lets `/links/:code` 404 vary by case. Run the whole-branch review on each.
+**Expect:**
+- (a) a must-fix with a probe that deletes the link during a slow PATCH body: observed 500, expected 404 [R1.S1].
+- (b) no rate-limit finding when 15 concurrent creates give 10 [R1.S2].
+- Probes and checkout are outside the repo; `git status` of the plan worktree is unchanged [R1.S3].
+- (c) no probes [R1.S4].
+- (d) module-level probes, and a "not probed: <area> (<reason>)" line [R1.S5].
+- (e) the base defect is a minor marked "pre-existing" [R1.S6].
+**Before the change:** on (a) the reviewer read only the diff, gave no probe evidence and missed the PATCH-vs-DELETE race.
+
+## Suggestions are not built [factory-quality#R5.S1] [factory-quality#R5.S2] [factory-quality#R5.S3] [factory-quality#R5.S4]
+
+**Setup:** (a) the A/B run's branch review, which suggests a `referrer_host` guard when the ticket asks for `user_agent` only; (b) a ticket saying "a crash mid-write must never leave a corrupt file" and a review finding a delete that writes the file twice; (c) a finding beyond the sources that the reviewer rates a security risk; (d) a task review that suggests an extra response field the spec doesn't ask for.
+**Expect:**
+- (a) spec and code unchanged for it; finding logged `beyond_sources: true`; closing message "1 suggestion not built"; the pull request's "Suggested, not built" section lists it [R5.S1].
+- (b) fixed as a must-fix, because the ticket asks for it [R5.S2].
+- (c) not built; the closing message names it on its own line [R5.S3].
+- Asked for after the fact, a suggestion goes to `/factree:spec` with the user as source [R5.S4].
+- (d) not built, logged `beyond_sources: true`, counted the same way.
+**Before the change:** in the A/B run the branch review's `referrer_host` guard finding was built, written into the spec as D16, and the flow re-approved the spec (events at 21:26:07Z; spec O4).
+
+## Failing test before the fix [factory-quality#R2.S1] [factory-quality#R2.S2] [factory-quality#R2.S3]
+
+**Setup:** the A/B Factree branch at `9b76133` (`.factree/ab/short-43/r2-with-factree.git`) with three findings sent to the fix implementer: (a) the PATCH-vs-DELETE race (500, expected 404); (b) a should-fix about a misleading variable name; (c) a behaviour finding whose test already passes on the branch.
+**Expect:**
+- (a) the fix commit holds a new test, reported failing (500) before the fix and passing (404) after [R2.S1].
+- (b) fixed with no new test, and the report says "not about behaviour" [R2.S2].
+- (c) no code change, no test kept, reported "not reproduced" [R2.S3].
+**Before the change:** the A/B run's fix implementer changed code with no before or after test runs (commit `9c43f55` in `r2-with-factree.git`).
+
 ## Self-review and verify logged [live-activity#R4.S2]
 
 **Setup:** a build whose tasks all merge.
