@@ -1,0 +1,37 @@
+# The checks a maintainer runs after every change (CLAUDE.md), on every pull request and push to main (spec ci R1).
+name: checks
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/companion/package-lock.json
+      - name: Install the companion's dependencies
+        run: npm ci
+        working-directory: apps/companion
+      - name: Typecheck
+        run: npm run typecheck
+        working-directory: apps/companion
+      - name: Companion tests
+        run: npm test
+        working-directory: apps/companion
+      - name: Build the UI
+        run: npm run build
+        working-directory: apps/companion
+      - name: The built UI is committed and up to date
+        run: git diff --exit-code -- plugins/factree/ui || { echo "::error::plugins/factree/ui is out of date: run npm run build in apps/companion and commit it"; exit 1; }
+      - name: Script tests
+        run: bash tests/run.sh

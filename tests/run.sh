@@ -489,9 +489,11 @@ check "the demo's spec and plan pass with no errors or warnings [readme#R1.S3]" 
 echo "# clean install"
 # The committer's own name, home folder and email appear in no tracked file, the license included [clean-install#R1.S1].
 me=$(git config user.name); mail=$(git config user.email)
+# A code owner's handle is public on purpose (ci R2): only a committer who isn't one is checked.
+grep -qiE "@${me}( |$)" .github/CODEOWNERS 2>/dev/null && me="" && mail=""
 hits=$(git ls-files | grep -v -E '\.(gif|png|jpg)$' | while read -r f; do
   { [ -n "$me" ] && [ "$me" != "John Doe" ] && grep -qiF "${me%% *}" "$f"; } || grep -qF "$HOME/" "$f" || { [ -n "$mail" ] && grep -qiF "$mail" "$f"; } && echo "$f"; done)
-check "no one's name, home folder or email in tracked files, the license included [clean-install#R1.S1]" '[ -z "$hits" ] || { echo "$hits" | head -5; false; }'
+check "no one's name, home folder or email in tracked files, the license included; a code owner's handle is allowed [clean-install#R1.S1] [clean-install#R1.S2]" '[ -z "$hits" ] || { echo "$hits" | head -5; false; }'
 # Everything the tests and the recorder need is tracked [clean-install#R2.S3].
 check "the demo workspace is tracked [clean-install#R2.S3]" '[ -n "$(git ls-files examples/.factree/specs/url-shortener.md)" ] && [ -n "$(git ls-files examples/.factree/work/001-url-shortener/plan.md)" ]'
 # The plugin folder alone, in a new repo with no workspace (clean-install R2).
@@ -521,5 +523,16 @@ echo "# amended plans"
 amend=$(awk '/^\*\*Amending an approved plan\*\*/{f=1} f{print} f && /^$/{exit}' $P/skills/plan/SKILL.md)
 check "the plan skill approves an amended plan again [planning#R6.S1]" 'echo "$amend" | grep -q "plan.approved" && echo "$amend" | grep -q "flow: no open decisions"'
 check "a new pattern in an amendment is asked first [planning#R6.S2]" 'echo "$amend" | grep -q "new pattern, dependency or lens"'
+
+
+echo "# checks on every pull request"
+wf=.github/workflows/checks.yml
+check "the workflow runs the repo's checks on pull requests and main [ci#R1.S1]" '[ -f $wf ] && grep -q "pull_request" $wf && grep -q "branches: \[main\]" $wf && grep -q "npm run typecheck" $wf && grep -q "npm test" $wf && grep -q "npm run build" $wf && grep -q "bash tests/run.sh" $wf'
+check "a stale built UI fails the checks [ci#R1.S2]" 'grep -q "git diff --exit-code -- plugins/factree/ui" $wf'
+check "every file has a code owner [ci#R2.S1]" 'grep -qE "^\* +@factree-ai-dev$" .github/CODEOWNERS'
+
+echo "# readme commands"
+cmds_missing=$(for c in spec plan build verify review ui init; do awk '/^## Commands/{f=1;next} /^## /{f=0} f' README.md | grep -q "/factree:$c\`" || echo "$c"; done)
+check "the README lists the commands, no How it works [readme#R2.S1]" '! grep -q "^## How it works" README.md && grep -q "^## Commands" README.md && [ -z "$cmds_missing" ]'
 
 exit $fail

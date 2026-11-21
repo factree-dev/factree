@@ -11,7 +11,7 @@ You decide. Factree specs, plans, builds, verifies and opens the pull request, s
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![stages](https://img.shields.io/badge/spec%20·%20plan%20·%20build%20·%20verify%20·%20review-working-2ea043)](#status)
 
-[Install](#install) · [How it works](#how-it-works) · [The companion](#the-companion) · [Gets better as you use it](#gets-better-as-you-use-it) · [Configure](#configure) · [Roadmap](#status)
+[Install](#install) · [Commands](#commands) · [The companion](#the-companion) · [Gets better as you use it](#gets-better-as-you-use-it) · [Configure](#configure) · [Roadmap](#status)
 
 </div>
 
@@ -65,34 +65,17 @@ Reviewer comments come back to Claude: a code change goes through build and veri
 
 See the worked example from the recording: [the spec](examples/.factree/specs/url-shortener.md) and [the plan](examples/.factree/work/001-url-shortener/).
 
-## How it works
+## Commands
 
-```mermaid
-flowchart LR
-  R([A requirement]) --> S
-  subgraph run [" One small change, start to finish in a sitting "]
-    S[Spec] --> P[Plan] --> B["Build<br/>task by task, each reviewed"] --> V[Verify] --> RV["Review<br/>pull request"]
-    V -->|something failing| B
-    RV -->|code change| B
-    RV -->|behaviour change| S
-  end
-  RV --> M([Merged by people])
-  V -.->|lessons| L[(What it learned)]
-  L -.->|questions, rules, defaults| S
-  L -.-> P
-```
-
-It isn't waterfall. Each spec is one small change, sized so it goes from requirement to pull request in a single sitting, and many specs move through the factory at once. Work loops back wherever it should: a failing verify goes back to Build, a reviewer's code change through Build and Verify again, a change in behaviour through the spec first. What each run teaches goes into the next one. You're asked only for open decisions, at any stage, and nothing waits for an approval.
-
-| Stage | Command | In | Out |
+| | Command | In | Out |
 |---|---|---|---|
 | **Spec** | `/factree:spec` | any requirement | `.factree/specs/<capability>.md`: purpose, scope and anti-goals, requirements with scenarios, a sketch of anything you'll see, decisions, open questions |
 | **Plan** | `/factree:plan` | a spec with nothing open | `plan.md` (order, coverage, global constraints, review focus) plus a design and tasks for each vertical it touches: backend, frontend, infra… |
 | **Build** | `/factree:build` | a plan with nothing open | commits on `factree/<work>`, one per task, test-first, reviewed, in parallel where the plan allows, then a review of the whole branch |
 | **Verify** | `/factree:verify` | a spec | every scenario proved, failing or unverified, plus the typecheck and build |
 | **Review** | `/factree:review` | a verified plan | a GitHub pull request saying what was built, proved and where to look; comments looped back through build or the spec; conflicts with the base resolved the repo's way and verified, or brought to you; never merged by Factree (needs the [GitHub CLI](https://cli.github.com)) |
-
-Each stage also runs on its own. Every change goes through the factory, down to one line of copy. Requests are sized first: **tiny** (a one-requirement spec and a one-task plan), **compact** (spec and plan written together) or **standard**. A spec with nothing open is approved by the flow, so the small ones never wait on you.
+| **Companion** | `/factree:ui` | a workspace | a local page following every spec live through the stages, where you can make the decisions Claude waits on |
+| **Set up** | `/factree:init` | a repo or folder | a workspace where you want it, with starting preferences (optional: every command makes one on first use) |
 
 ## The companion
 
