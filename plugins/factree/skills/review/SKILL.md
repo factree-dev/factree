@@ -26,7 +26,7 @@ Run `command -v gh` and `gh auth status`. If `gh` is missing or not signed in, p
 
 ### 2. Check what's being sent (review R1)
 
-Find the workspace with `bash <plugin>/scripts/init.sh` (its last line is the workspace; it creates one on first use, local only, and on exit 3, outside a git repo, say what it printed and stop). Read `<workspace>/work/<work>/plan.md` If the plan isn't implemented, push nothing: name what's unbuilt and stop.
+Find the workspace with `bash <plugin>/scripts/init.sh` (its last line is the workspace; it creates one on first use, local only, and on exit 3, outside a git repo, say what it printed and stop). Read `<workspace>/work/<work>/plan.md`. If the plan isn't implemented, push nothing: name what's unbuilt and stop.
 
 ### 3. Open or update the pull request (review R1, R2)
 
