@@ -1162,7 +1162,7 @@ function reviewOf(work, events) {
 /** Stale stages and the round (spec-ring R4). A stage after Spec is stale when it last finished before the latest spec
 *  change and hasn't finished since. A spec change starts a new round only once the work went out for review since
 *  the round began; each request for changes is a round too. */
-function loopOf(id, works, events) {
+function loopOf(id, works, events, verifyOn = false) {
 	const finished = {};
 	let round = 1, reviewed = false, updated = null;
 	for (const e of events) {
@@ -1186,21 +1186,17 @@ function loopOf(id, works, events) {
 	const stale = [false];
 	let carry = false;
 	const builtAfter = Boolean(updated && finished.build && finished.build >= updated);
-	[
+	(verifyOn ? [
 		"plan",
 		"build",
 		"verify"
-	].forEach((k, i) => {
+	] : ["plan", "build"]).forEach((k, i) => {
 		const st = carry ? Boolean(finished[k]) : before(k) && !(i === 0 && builtAfter);
 		stale.push(st);
 		carry ||= st;
 	});
 	stale.push(Boolean(finished.review) && (carry || before("merged") && before("review")));
-	if (updated && finished.plan && finished.plan >= updated) for (const i of [
-		2,
-		3,
-		4
-	]) stale[i] = false;
+	if (updated && finished.plan && finished.plan >= updated) for (let i = 2; i < stale.length; i++) stale[i] = false;
 	return {
 		stale,
 		round

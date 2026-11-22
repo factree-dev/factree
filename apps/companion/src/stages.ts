@@ -4,6 +4,7 @@
 import type { SpecSummary, Spec } from "../shared/types.ts";
 import { PLAN_LABEL, reviewLabel } from "./words.ts";
 import { planHref, verifyHref } from "./links.ts";
+import { VERIFY_ON } from "./features.ts";
 
 /** The Review stage (stage-spine R3, review R8): opens once a built plan's verify is clean, or it has a pull request,
  *  and otherwise says why not; done when the pull request is merged. */
@@ -11,11 +12,13 @@ import { planHref, verifyHref } from "./links.ts";
 export const toHandle = (r: { state: string; comments?: { handled?: string | null }[] }) =>
   r.state === "MERGED" || r.state === "CLOSED" ? 0 : (r.comments ?? []).filter((c) => !c.handled).length;
 
-export function reviewStage(s: SpecSummary): { sub: string; href: string | null; done: boolean } {
+export function reviewStage(s: SpecSummary, verifyOn: boolean = VERIFY_ON): { sub: string; href: string | null; done: boolean } {
   const r = s.plan?.review;
   const href = `/work/${s.id}/review`;
   const open = r ? toHandle(r) : 0;
   if (r) return { sub: open ? `${open} comment${open === 1 ? "" : "s"} to handle` : reviewLabel(r.state), href, done: r.state === "MERGED" };
+  // Verify paused: the pull request opens once the plan is implemented (verify-paused R4).
+  if (!verifyOn) return s.plan?.implemented ? { sub: "Open the pull request", href, done: false } : { sub: "Build it first", href: null, done: false };
   if (!s.plan?.implemented || !s.verify) return { sub: "Verify it first", href: null, done: false };
   if (s.verify.failing > 0) return { sub: "Fix what's failing first", href: null, done: false };
   return { sub: "No pull request yet", href, done: false };
