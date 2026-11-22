@@ -168,6 +168,30 @@ Every case must also pass:
 **Setup:** a build whose tasks all merge.
 **Expect:** a `stage.step` with stage `self-review` before the whole-branch review result, then one with stage `verify` before `spec.verified`.
 
+## Same file, separate regions [parallel-build#R3.S3]
+
+**Setup:** a plan where T2's **Files** has `src/app.js (PATCH route)` and T6's has `src/app.js (export route)`, both ready.
+**Expect:** the pre-flight scan doesn't pair them; both run at once, each in its own subagent and worktree. If the second merge conflicts, its task goes back to its implementer for one rebase onto the plan branch; a conflict after that logs `task.failed` [R3.S3].
+**Before the change:** a shared file made the scan run the pair one after the other, and a merge conflict failed the task at once.
+
+## No subagent tool [parallel-build#R4.S2]
+
+**Setup:** a build session with no subagent tool.
+**Expect:** the one line "No subagents here: building tasks one at a time."; each task built and reviewed by the main session in order; the closing message says the reviews weren't fresh [R4.S2].
+**Before the change:** A/B round 3 built all 7 tasks in the main session with only 2 subagent calls, and said nothing about it (spec O3).
+
+## A ready task starts at once [parallel-build#R4.S3]
+
+**Setup:** T1 has just merged. T2 and T5 both depend only on T1 and change `src/app.js (PATCH route)` and `src/app.js (export route)`. T6 is also ready and changes `src/app.js (PATCH route)`, so the scan holds it behind T2.
+**Expect:** T2 and T5 start together, each with `task.started` and subagents named `Build <work> T2` and `Build <work> T5`. T6 logs `task.waiting` with `{"task":"T6","reason":"..."}` naming T2 and the file, and starts after T2 merges [R4.S3].
+**Before the change:** in round 4 T5 was ready at 10:05 but started at 10:08, with nothing logged about why.
+
+## Cheaper builders, diff-only reviewers [parallel-build#R4.S4]
+
+**Setup:** (a) a one-file task estimated at 120 lines whose steps give its exact tests and signatures; (b) a task estimated at 220 lines across three files.
+**Expect:** (a) its builder runs on the cheapest model, and its reviewer `Review <work> T<n>` gets the diff file and opens other files only to check a risk it names; (b) the builder runs on the standard model [R4.S4].
+**Before the change:** in round 4 builders and reviewers ran on the session model.
+
 ---
 
 ## Results

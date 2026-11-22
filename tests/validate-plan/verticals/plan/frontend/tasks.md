@@ -7,7 +7,7 @@ vertical: frontend
 ### T2: Export button
 
 **Proves:** widget-export#R1.S1, widget-export#R2.S2
-**Depends on:** T1
+**Depends on:** T1 (the export endpoint it calls)
 **Est. diff:** ~100 lines
 
 **Files**

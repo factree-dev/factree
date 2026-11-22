@@ -20,7 +20,7 @@ vertical: backend
 ### T3: One export at a time
 
 **Proves:** widget-export#R2.S3
-**Depends on:** T2
+**Depends on:** T2 (the button that starts an export)
 **Est. diff:** ~100 lines
 
 **Files**

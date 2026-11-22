@@ -15,7 +15,7 @@ Each task is one reviewable change: it ends with tests passing, is one commit, a
 ### T1: <title>
 
 **Proves:** <spec>#R1.S1, <spec>#R1.S2
-**Depends on:** none
+**Depends on:** none  <!-- or: T1 (<why: the interface or lines it needs>), T2 (<why>) -->
 **Est. diff:** ~<n> lines (<breakdown>)
 
 **Files**

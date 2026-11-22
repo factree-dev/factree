@@ -144,7 +144,7 @@ ROLE == "tasks" {
     if (match($0, /^### T[0-9]+: [^ ]/)) {
       match($0, /T[0-9]+/); t = substr($0, RSTART, RLENGTH)
       if (t in TASK) err(FILENAME, FNR, "duplicate task id " t " (" TFILE[t] ":" TASK[t] ", " FILENAME ":" FNR ")")
-      ntasks++; TASK[t] = FNR; TFILE[t] = FILENAME; TLIST[ntasks] = t
+      ntasks++; if (num(t) > top) top = num(t); TASK[t] = FNR; TFILE[t] = FILENAME; TLIST[ntasks] = t
       # Vertical plans interleave numbers across files; their order is checked plan-wide in END.
       if (MODE == "old" && num(t) != ntasks) warn(FILENAME, FNR, t " is out of sequence (expected T" ntasks ")")
     } else { err(FILENAME, FNR, "task heading must be \"### T<n>: <title>\""); t = "" }
@@ -170,11 +170,13 @@ ROLE == "tasks" {
   if ($0 ~ /^\*\*Depends on:\*\*/) {
     HASDEPS[t] = 1
     v = trim(substr($0, 16)); if (tolower(v) ~ /^none/ || v == "—" || v == "-") next
-    n = split(v, deps, ",")
-    for (i = 1; i <= n; i++) {
-      d = trim(deps[i]); sub(/[ \t].*$/, "", d)
-      if (d !~ /^T[0-9]+$/) { err(FILENAME, FNR, t " has a malformed dependency \"" d "\""); continue }
-      ndeps++; DEPT[ndeps] = t; DEPD[ndeps] = d; DEPF[ndeps] = FILENAME; DEPL[ndeps] = FNR
+    # "T<n> (<reason>), T<m>": a reason may hold commas, so scan rather than split.
+    while ((v = trim(v)) != "") {
+      sub(/^,[ \t]*/, "", v); match(v, /^[^ \t,(]*/); d = substr(v, 1, RLENGTH); v = trim(substr(v, RLENGTH + 1)); why = ""
+      if (match(v, /^\([^)]*\)/)) { why = trim(substr(v, 2, RLENGTH - 2)); v = substr(v, RLENGTH + 1) }
+      if (d !~ /^T[0-9]+$/) { err(FILENAME, FNR, t " has a malformed dependency \"" d "\""); sub(/^[^,]*/, "", v); continue }
+      ndeps++; DEPT[ndeps] = t; DEPD[ndeps] = d; DEPF[ndeps] = FILENAME; DEPL[ndeps] = FNR; LINK[t, d] = 1
+      if (why == "") { BARE[t, d] = 1; warn(FILENAME, FNR, t ": dependency on " d " has no reason") }
     }
     next
   }
@@ -208,8 +210,7 @@ END {
   }
   # ----- spec state -----
   sst = FMV[SI, "status"]
-  # A compact change plans its draft spec in the same run and approves both together (decision-flow R5),
-  # so a draft spec is only an error once the plan itself is approved.
+  # A compact change approves its draft spec with the plan (decision-flow R5): draft is an error only once the plan is approved.
   pst = FMV[HI, "status"]
   if (sst == "draft" && pst != "draft" && pst != "") err(SPECF, FML[SI, "status"], "spec is draft; it must be approved before the plan is")
   else if (sst == "draft") warn(SPECF, FML[SI, "status"], "spec is draft; approve it with the plan, or before planning")
@@ -270,15 +271,15 @@ END {
     else if (!COMMIT[t]) warn(tf, l, t " has no commit step")
     if (STEPS[t] > 0 && !NAMED[t]) warn(tf, l, t ": steps name no test or signature")
   }
-  # Vertical plans number tasks in build order across the plan: T1..TN, each once.
-  if (MODE == "vertical") {
-    top = 0; for (t in TASK) if (num(t) > top) top = num(t)
+  if (MODE == "vertical")  # build order across the plan: T1..TN, each once
     for (i = 1; i <= top; i++) if (!(("T" i) in TASK)) warn(HEADF, 1, "task numbers skip T" i "; number tasks 1..N across the plan")
-  }
   # A task may depend only on a lower-numbered task that exists, in any vertical.
-  for (i = 1; i <= ndeps; i++) {
-    t = DEPT[i]; d = DEPD[i]
-    if (!(d in TASK) || num(d) >= num(t)) err(DEPF[i], DEPL[i], t " depends on " d ", which is not an earlier task")
+  for (i = 1; i <= ndeps; i++) if (!(DEPD[i] in TASK) || num(DEPD[i]) >= num(DEPT[i])) err(DEPF[i], DEPL[i], DEPT[i] " depends on " DEPD[i] ", which is not an earlier task")
+  # Four or more tasks, each depending on the one numbered just before, with any link bare: nothing can run at once.
+  run = 1; for (i = 2; i <= top + 1; i++) {
+    if (i <= top && (("T" i, "T" (i - 1)) in LINK)) { run++; bare += (("T" i, "T" (i - 1)) in BARE); continue }
+    if (run >= 4 && bare && !chain++) warn(HEADF, 1, "plan is one chain: no tasks can run at once")
+    run = 1; bare = 0
   }
   # ----- coverage -----
   covered = 0; total = 0

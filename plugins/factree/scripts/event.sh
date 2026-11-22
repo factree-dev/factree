@@ -5,7 +5,7 @@
 # Example: event.sh spec.approved link-report '{"by":"John Doe"}'
 # Inside Claude Code, the event also records the session (CLAUDE_CODE_SESSION_ID).
 
-types="spec.created spec.updated spec.approved spec.step question.asked question.answered question.opened question.resolved decision.recorded plan.created plan.design_approved plan.approved plan.implemented task.started task.done task.failed task.blocked spec.verified decision.feedback task.reviewed bug.escaped lesson.proposed lesson.approved lesson.rejected review.opened review.comment review.state review.reply stage.step"
+types="spec.created spec.updated spec.approved spec.step question.asked question.answered question.opened question.resolved decision.recorded plan.created plan.design_approved plan.approved plan.implemented task.started task.done task.failed task.blocked spec.verified decision.feedback task.reviewed bug.escaped lesson.proposed lesson.approved lesson.rejected review.opened review.comment review.state review.reply stage.step agent.started task.waiting"
 
 type="$1"; subject="$2"; data="${3:-}"
 [ -z "$data" ] && data='{}'
@@ -27,7 +27,7 @@ actor=$(git config user.name 2>/dev/null || whoami)
 actor=$(printf '%s' "$actor" | sed 's/\\/\\\\/g; s/"/\\"/g')
 ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 cwd=$(printf '%s' "$PWD" | sed 's/\\/\\\\/g; s/"/\\"/g')
-case "$type" in plan.*|task.*|review.*) key="work" ;; *) key="spec" ;; esac
+case "$type" in plan.*|task.*|review.*|agent.*) key="work" ;; *) key="spec" ;; esac
 # The Claude Code session logging this, so the UI can offer to resume it (spec-sessions R1). Ids are [A-Za-z0-9_-] only.
 session=""
 case "${CLAUDE_CODE_SESSION_ID:-}" in ""|*[!A-Za-z0-9_-]*) ;; *) session=",\"session\":\"$CLAUDE_CODE_SESSION_ID\"" ;; esac

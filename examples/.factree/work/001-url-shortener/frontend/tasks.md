@@ -15,7 +15,7 @@ Each task is one reviewable change: it ends with tests passing, is one commit, a
 ### T3: Links page
 
 **Proves:** url-shortener#R5.S1, url-shortener#R5.S2
-**Depends on:** T1
+**Depends on:** T1 (the API it calls)
 **Est. diff:** ~150 lines (page 70, route 3, tests 75)
 
 **Files**
