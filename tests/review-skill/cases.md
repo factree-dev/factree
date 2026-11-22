@@ -90,6 +90,36 @@ Run each case in a scratch repo with a GitHub remote you can push to, the plugin
 **Expect:** in both, the fix task is built, then the profile's full test suite runs before the push. Nothing runs `/factree:verify`. A failing suite means nothing is pushed and the failure goes to the user [R3.S3].
 **Before the change:** each loop called `/factree:verify` before pushing.
 
+## A branch fails alone [multi-repo#R5.S7]
+
+**Setup:** `tests/fixtures/multi/make.sh <dir>` (bare remotes), a fake `gh` first on PATH that logs its calls and succeeds, a built plan with T1 in `backend` and T2 in `frontend`; T2's branch fails `frontend`'s suite on its own.
+**Expect:** no push (the bare remotes gain no `factree/` branch), no `gh pr create` in the fake's log; the user is told T2 fails alone, with the failing test.
+**Before the change:** review ran one suite on the integration branch and opened one pull request for the plan (O4).
+
+## A repo can't be reached [multi-repo#R5.S8]
+
+**Setup:** the same fixture; the fake `gh repo view -R <owner>/infra` exits 1, "not found"; the plan has tasks in `backend` and `infra`.
+**Expect:** nothing pushed anywhere, including `backend`; no pull request; the user is told `infra` can't be reached and why. A second run where every `gh repo view` passes but the second `gh pr create` fails: the first pull request is closed, the pushed branches are deleted from the bare remotes, and the failure is reported.
+**Before the change:** one push and one `gh pr create` in the current folder; no per-repo check and no undo.
+
+## Not before the branch review [multi-repo#R5.S9]
+
+**Setup:** the same fixture; the build ended with a must-fix still open in the branch review.
+**Expect:** no push, no pull request; the user is told the must-fix is open.
+**Before the change:** only "the plan is implemented" was checked.
+
+## Linked in merge order [multi-repo#R6.S1]
+
+**Setup:** the same fixture; T1 in `backend` (base `main`), T2 in `frontend` (base `develop`) depending on T1; fake `gh` numbers pull requests per repo (backend #12, frontend #45).
+**Expect:** `gh pr create -R <owner>/backend --head factree/<work>-T1 --base main` runs before `-R <owner>/frontend --head factree/<work>-T2 --base develop`; `factree/<work>` is never pushed. #45's description lists backend#12 (T1) first and frontend#45 (T2, after backend#12) second, and says backend#12 merges first; #12's lists both too. Two `review.opened` events carry `repo`, `tasks`, `base` and `after` (`["backend#12"]` on the second); one `wait-review.sh <work> <repo> <pr>` starts per pull request.
+**Before the change:** one pull request with no list of others and one `review.opened` without `repo`.
+
+## A single-repo plan [multi-repo#R5.S5]
+
+**Setup:** the fixture's `backend` as a one-repo workspace, a fake `gh` first on PATH, a built plan of 3 independent tasks.
+**Expect:** 3 `gh pr create` calls, one per task, each `--head factree/<work>-T<n>` on the repo's base; `factree/<work>` is not pushed.
+**Before the change:** one pull request from `factree/<work>` for the whole plan.
+
 ---
 
 ## Results
