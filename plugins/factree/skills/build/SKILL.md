@@ -34,15 +34,15 @@ Work on `factree/<work>`: create it from the current commit, or check it out if 
 
 **Baseline** (building R1): run the project's full test command on the plan branch before any task. If anything fails, stop before the first wave and report each failing test as already failing on `factree/<work>`; a task must never be blamed for it.
 
-**Pre-flight scan** (building R2): list every pair of tasks that touch the same file (their **Files**) or the same interface (one produces what the other consumes). Such a pair never runs at the same time, even when both are ready; say so in one line, e.g. "T2 and T3 both change `src/App.tsx`: running them one after the other."
+**Pre-flight scan** (building R2): list every pair of tasks that touch the same file (their **Files**) or the same interface (one produces what the other consumes). Such a pair never runs at the same time, even when both are ready; say so in one line, e.g. "T2 and T3 both change `src/App.tsx`: running them one after the other." Tasks whose **Files** name separate regions of one file (`src/app.js (PATCH route)` and `src/app.js (export route)`) don't conflict and run together; a merge conflict between them is handled in step 4.
 
 ### 3. Run in waves
 
-A task is **ready** when every task it depends on is done. Start ready tasks, **at most three at a time**, each as a **subagent in its own git worktree** on a branch `factree/<work>-T<n>` made from the plan branch, with the prompt from `<skill>/task-prompt.md` filled in for that task. In each new worktree, run the project's install command from the profile (e.g. `npm ci`) before the subagent starts (building R1). Log `task.started` with `{"task":"T<n>"}` for each.
+A task is **ready** when every task it depends on is done. Start ready tasks, **at most three at a time**, each as its **own subagent in its own git worktree** on a branch `factree/<work>-T<n>` made from the plan branch, with the prompt from `<skill>/task-prompt.md` filled in for that task. In each new worktree, run the project's install command from the profile (e.g. `npm ci`) before the subagent starts (building R1). Log `task.started` with `{"task":"T<n>"}` for each.
 
 **Name a model for every subagent** (building R6), never leaving it to inherit yours: the cheapest model for a task whose steps give its exact tests and signatures in one or two files; a standard model for a task across several files or needing judgment, and for reviews; a more capable model for the last round of a fix loop.
 
-No subagent tool, or worktrees aren't possible here: run the same order one task at a time yourself, in the working folder on the plan branch, following the same task prompt. Say so in one line.
+**Never build a task yourself while a subagent tool exists**, however small or sequential the plan. Without one (or without worktrees), say "No subagents here: building tasks one at a time." before the first task, then build and review each task yourself in order, in the working folder on the plan branch, following the same task prompt. The closing message says the reviews weren't fresh.
 
 ### 4. Land each task as it returns
 
@@ -50,7 +50,7 @@ When a subagent returns **done**, with its branch, commit, changed lines and the
 
 0. **Review** (building R3): write the task's diff to a file (`git log`, `git diff --stat` and `git diff -U10` against the plan branch) and start a fresh reviewer with `<skill>/review-prompt.md` filled in. Both verdicts must pass before it merges. A failing verdict starts the fix loop below. A finding with `beyond_sources: true` doesn't fail a verdict and never goes to the fix loop (see Suggestions not built).
 1. **Budget:** if its changed lines (tests included; lockfiles and built files excluded) exceed `review_budget`, don't merge. Log `task.failed` with `{"task","reason":"over budget: <n> lines"}` and propose a split of it into tasks within budget, for the user to make with `/factree:plan`.
-2. **Merge** its branch into `factree/<work>`. A conflict: abort the merge, log `task.failed` with the conflicting files.
+2. **Merge** its branch into `factree/<work>`. A conflict: abort the merge and send the task back to its implementer for one rebase onto the plan branch, then review and merge again. Still conflicting: abort and log `task.failed` with the conflicting files.
 3. **Full suite** on the plan branch, with the project's test command from the profile. Red: undo the merge (`git reset --hard` to the commit before it, on the plan branch only), log `task.failed` with the failing tests.
 4. **Green:** run `bash <plugin>/scripts/task-done.sh <work> <task> <commit> <lines> "<tests run>"`. It ticks the task's steps, logs `task.done`, and marks the plan implemented when it was the last. Then start any tasks that are now ready.
 

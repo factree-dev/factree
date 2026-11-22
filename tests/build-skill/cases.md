@@ -168,6 +168,18 @@ Every case must also pass:
 **Setup:** a build whose tasks all merge.
 **Expect:** a `stage.step` with stage `self-review` before the whole-branch review result, then one with stage `verify` before `spec.verified`.
 
+## Same file, separate regions [parallel-build#R3.S3]
+
+**Setup:** a plan where T2's **Files** has `src/app.js (PATCH route)` and T6's has `src/app.js (export route)`, both ready.
+**Expect:** the pre-flight scan doesn't pair them; both run at once, each in its own subagent and worktree. If the second merge conflicts, its task goes back to its implementer for one rebase onto the plan branch; a conflict after that logs `task.failed` [R3.S3].
+**Before the change:** a shared file made the scan run the pair one after the other, and a merge conflict failed the task at once.
+
+## No subagent tool [parallel-build#R4.S2]
+
+**Setup:** a build session with no subagent tool.
+**Expect:** the one line "No subagents here: building tasks one at a time."; each task built and reviewed by the main session in order; the closing message says the reviews weren't fresh [R4.S2].
+**Before the change:** A/B round 3 built all 7 tasks in the main session with only 2 subagent calls, and said nothing about it (spec O3).
+
 ---
 
 ## Results
