@@ -610,5 +610,35 @@ check "the README lists the commands, no How it works [readme#R2.S1]" '! grep -q
 
 echo "# verify paused"
 check "verify is not a skill, and is kept [verify-paused#R1.S1]" '[ ! -e $P/skills/verify ] && [ -f $P/paused/verify/SKILL.md ]'
+echo "# multi-repo"
+REPOS="$(pwd)/$P/scripts/repos.sh"; MAKE="$(pwd)/tests/fixtures/multi/make.sh"
+mtmp() { tmp=$(mktemp -d); tmp=$(cd "$tmp" && pwd -P); bash "$MAKE" "$tmp/company"; }
+mtmp; co="$tmp/company"; rm -rf "$co/origins"
+out=$(cd "$co" && env -u FACTREE_HOME bash "$INIT"); code=$?
+check "a folder holding three repos gets a workspace listing them [multi-repo#R1.S1]" '[ $code -eq 0 ] && [ "$(echo "$out" | tail -n1)" = "$co/.factree" ] && [ "$(sort "$co/.factree/repos.md" | tr "\n" " ")" = "backend frontend infra " ]'
+out=$(cd "$co/backend" && env -u FACTREE_HOME bash "$INIT"); code=$?
+check "a command inside a repo finds the workspace above [multi-repo#R1.S3]" '[ $code -eq 0 ] && [ "$out" = "$co/.factree" ] && [ ! -d "$co/backend/.factree" ]'
+before=$(cat "$co/.factree/repos.md"); out=$(cd "$co" && bash "$REPOS" of backend/src/x.ts); code=$?
+check "repos.sh of finds the repo and never writes [multi-repo#R1]" '[ $code -eq 0 ] && [ "$out" = "backend" ] && [ "$(cat "$co/.factree/repos.md")" = "$before" ]'
+out=$(cd "$co" && bash "$REPOS" of docs/x.md); code=$?
+check "repos.sh of outside every repo exits 1 [multi-repo#R1]" '[ $code -eq 1 ] && [ -z "$out" ]'
+out=$(cd "$co" && bash "$REPOS" list)
+check "repos.sh list prints the repos" '[ "$(echo "$out" | wc -l | tr -d " ")" = 3 ]'
+git init -q "$co/mobile"; (cd "$co" && bash "$REPOS" add mobile; bash "$REPOS" add mobile)
+check "repos.sh add appends a newly cloned repo once [multi-repo#R1.S4]" '[ "$(grep -cx mobile "$co/.factree/repos.md")" = 1 ] && [ "$(wc -l < "$co/.factree/repos.md" | tr -d " ")" = 4 ]'
+mkdir "$co/notes"; (cd "$co" && bash "$REPOS" add notes 2>/dev/null)
+check "repos.sh add refuses a folder that is not a repo" '! grep -qx notes "$co/.factree/repos.md"'
+rm -rf "$tmp"
+tmp=$(mktemp -d); tmp=$(cd "$tmp" && pwd -P); mkdir -p "$tmp/a" "$tmp/b"
+out=$(cd "$tmp" && env -u FACTREE_HOME bash "$INIT" 2>&1); code=$?
+check "no repos anywhere creates nothing [multi-repo#R1.S2]" '[ $code -eq 3 ] && [ ! -d "$tmp/.factree" ] && echo "$out" | grep -q "/factree:init"'
+rm -rf "$tmp"
+fresh; (cd "$tmp/shop" && env -u FACTREE_HOME bash "$INIT" >/dev/null)
+check "a workspace inside one repo lists . [multi-repo#R1]" '[ "$(cat "$tmp/shop/.factree/repos.md")" = "." ] && [ "$(cd "$tmp/shop" && bash "$REPOS" of src/a.ts)" = "." ]'
+rm -rf "$tmp"
+mtmp; co="$tmp/company"; mkdir "$tmp/home"
+out=$(cd "$co" && FACTREE_HOME="$tmp/home" bash "$INIT")
+check "FACTREE_HOME still wins [multi-repo#R1]" '[ "$(echo "$out" | tail -n1)" = "$tmp/home" ] && [ ! -d "$co/.factree" ]'
+rm -rf "$tmp"
 
 exit $fail
