@@ -640,5 +640,15 @@ mtmp; co="$tmp/company"; mkdir "$tmp/home"
 out=$(cd "$co" && FACTREE_HOME="$tmp/home" bash "$INIT")
 check "FACTREE_HOME still wins [multi-repo#R1]" '[ "$(echo "$out" | tail -n1)" = "$tmp/home" ] && [ ! -d "$co/.factree" ]'
 rm -rf "$tmp"
+tmp=$(mktemp -d); tmp=$(cd "$tmp" && pwd -P); ln -s "$tmp" "$tmp-link"; co="$tmp-link/co"; mkdir -p "$co/a" "$co/ab" "$co/a b"
+for r in a "a b"; do git init -q "$co/$r"; done
+(cd "$co" && env -u FACTREE_HOME bash "$INIT" >/dev/null; git init -q a/inner; bash "$REPOS" add a/inner)
+of() { (cd "$co" && bash "$REPOS" of "$1"); }
+check "a path in a folder not created yet, through a symlink, finds its repo [multi-repo#R1]" '[ "$(of "a b/new/dir/x.ts")" = "a b" ] && [ "$(of "$tmp/co/a/new/x.ts")" = "a" ]'
+check "a repo folder matches on a / boundary only [multi-repo#R1]" '! of ab/x.ts >/dev/null && [ "$(of a/x.ts)" = "a" ]'
+check "the longest repo wins for a nested repo [multi-repo#R1]" '[ "$(of a/inner/new/x.ts)" = "a/inner" ]'
+(cd "$co" && bash "$REPOS" add "$tmp/elsewhere" 2>/dev/null); mkdir "$tmp/out"; git init -q "$tmp/out"; (cd "$co" && bash "$REPOS" add "$tmp/out" 2>/dev/null); code=$?
+check "add refuses a folder outside the workspace's folder [multi-repo#R1]" '! grep -q out "$co/.factree/repos.md"'
+rm -rf "$tmp" "$tmp-link"
 
 exit $fail

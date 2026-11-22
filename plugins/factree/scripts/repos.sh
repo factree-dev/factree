@@ -10,12 +10,15 @@ ws=$(bash "$here/root.sh") || { echo "no Factree workspace here" >&2; exit 2; }
 base=$(dirname "$ws")
 list="$ws/repos.md"
 
-# Absolute, symlink-resolved form of a path that may not exist yet (its parent must).
+# Absolute, symlink-resolved form of a path whose folders may not exist yet: resolve the nearest existing ancestor, then
+# put the rest back.
 absolute() {
   case "$1" in /*) p="$1" ;; *) p="$PWD/$1" ;; esac
-  d=$(dirname "$p"); f=$(basename "$p")
-  d=$(cd "$d" 2>/dev/null && pwd -P) || { printf '%s\n' "$p"; return; }
-  [ "$f" = "/" ] && printf '%s\n' "$d" || printf '%s/%s\n' "$d" "$f"
+  rest=""
+  while [ ! -d "$p" ] && [ "$p" != "/" ]; do rest="/$(basename "$p")$rest"; p=$(dirname "$p"); done
+  p=$(cd "$p" && pwd -P)
+  [ "$p" = "/" ] && p=""
+  printf '%s\n' "$p$rest"
 }
 # A listed folder relative to the workspace base, as an absolute path.
 listed_abs() { case "$1" in .) printf '%s\n' "$base" ;; *) printf '%s/%s\n' "$base" "$1" ;; esac; }
