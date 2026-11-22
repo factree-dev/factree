@@ -5,6 +5,7 @@
 # Prints "<task> done", then "<work> implemented" if every task in the plan is now done.
 # Needs a passing review: the latest task.reviewed event for this work and task (one with a "spec" field)
 # must have "spec":"pass" and "quality":"pass"; otherwise prints "<task> has no passing review" and exits 3.
+# Also needs an agent.started event the hook logged for a "Review <work> T<n>" subagent, else prints "<task> has no reviewer subagent", exit 3.
 # Exit 0 when marked; 2 on bad usage or an unknown task; 3 without a passing review. (spec build R4, R6; parallel-build R5)
 
 work="$1"; task="$2"; commit="$3"; lines="$4"; tests="$5"
@@ -25,6 +26,7 @@ case "$last" in
   *'"spec":"pass"'*'"quality":"pass"'*|*'"quality":"pass"'*'"spec":"pass"'*) ;;
   *) echo "$task has no passing review" >&2; exit 3 ;;
 esac
+grep "\"type\":\"agent.started\",\"work\":\"$work\"" "$root/events.jsonl" 2>/dev/null | grep -q "\"role\":\"review\",\"task\":\"$task\"" || { echo "$task has no reviewer subagent" >&2; exit 3; }
 
 # Tick every step of this task, and only this task.
 tmp="$file.$$"
