@@ -17,7 +17,7 @@ You decide. Factree specs, plans, builds and opens the pull request, stops only 
 
 </div>
 
-<p align="center"><img src="docs/factree-demo.gif" alt="The Factree companion building a URL shortener: Claude writes the spec, two decisions are answered in the browser, then it plans backend and frontend, builds three tasks with two in parallel, proves all 9 scenarios and opens the pull request, which merges at 100%" width="900"><br><sub>A URL shortener, from "members want short links" to a merged pull request, recorded from the real companion. You answer two decisions; Factree does the rest.</sub></p>
+<p align="center"><img src="docs/factree-demo.gif" alt="The Factree companion building a URL shortener: Claude writes the spec, two decisions are answered in the browser, then it plans backend and frontend, builds three tasks with two in parallel, builds all 9 scenarios' tasks and opens the pull request, which merges at 100%" width="900"><br><sub>A URL shortener, from "members want short links" to a merged pull request, recorded from the real companion. You answer two decisions; Factree does the rest.</sub></p>
 
 ---
 
@@ -27,7 +27,7 @@ You decide. Factree specs, plans, builds and opens the pull request, stops only 
 - **Every change starts as a spec.** A requirement from a ticket, a page or a chat becomes a spec grounded in your code: testable requirements, scenarios with IDs, what's in and out, and what must never happen.
 - **Plans follow your repo, not a template.** Every pattern a plan reuses cites where your repo already does it. Anything new needs your approval by name.
 - **Tasks fit one code review.** 300 changed lines by default, test-first, each proving named scenarios, reviewed by a fresh reviewer before it merges.
-- **Evidence, not vibes.** Every scenario ends up **proved**, **failing** or **unverified**. A test that cites a scenario but doesn't check its outcome doesn't count. What nobody checked is never assumed.
+- **Tests first, nothing claimed.** Every task is built test-first and the branch's full suite runs before the pull request. Verify, which marked scenarios proved or failing, is paused while it's redesigned, so nothing says a scenario is proved.
 - **It runs on its own once nothing is uncertain.** No approval clicks: answer the open decisions and it specs, plans, builds and opens the pull request in the same session. Review comments come back into the flow. It never merges.
 
 ## Install
@@ -58,7 +58,7 @@ Reply "yes" to take the recommendations, or e.g. "2: after a year".
 Reply `yes` and Factree takes it from there, with no approvals to click through: a plan split by backend and frontend, tasks built in parallel git worktrees, each reviewed before it merges, a review of the whole branch, and a pull request:
 
 ```
-url-shortener: 9 proved · 0 failing · 0 unverified
+url-shortener: 3 tasks merged
 npm test: 214 passed · npm run build: ok
 Pull request #42 opened: https://github.com/you/links/pull/42
 ```
@@ -74,7 +74,7 @@ See the worked example from the recording: [the spec](examples/.factree/specs/ur
 | **Spec** | `/factree:spec` | any requirement | `.factree/specs/<capability>.md`: purpose, scope and anti-goals, requirements with scenarios, a sketch of anything you'll see, decisions, open questions |
 | **Plan** | `/factree:plan` | a spec with nothing open | `plan.md` (order, coverage, global constraints, review focus) plus a design and tasks for each vertical it touches: backend, frontend, infra… |
 | **Build** | `/factree:build` | a plan with nothing open | commits on `factree/<work>`, one per task, test-first, reviewed, in parallel where the plan allows, then a review of the whole branch |
-| **Review** | `/factree:review` | an implemented plan | a GitHub pull request saying what was built, proved and where to look; comments looped back through build or the spec; conflicts with the base resolved the repo's way and tested, or brought to you; never merged by Factree (needs the [GitHub CLI](https://cli.github.com)) |
+| **Review** | `/factree:review` | an implemented plan | a GitHub pull request saying what was built and where to look; comments looped back through build or the spec; conflicts with the base resolved the repo's way and tested, or brought to you; never merged by Factree (needs the [GitHub CLI](https://cli.github.com)) |
 | **Companion** | `/factree:ui` | a workspace | a local page following every spec live through the stages, where you can make the decisions Claude waits on |
 | **Set up** | `/factree:init` | a repo or folder | a workspace where you want it, with starting preferences (optional: every command makes one on first use) |
 
@@ -90,7 +90,7 @@ A local page at `http://localhost:4747` that follows the factory live. Needs Nod
 - **One status everywhere.** The spec list, the line and the stage pages read the same state, so they never disagree. "Paused · 25 min ago" when a session has gone quiet.
 - **Pull requests stay current.** Merges, closes and review decisions show up even when nothing is following the pull request: the session hook catches up in the background when a session starts, and at most every 5 minutes after.
 - **Decide from the browser.** A spec waiting on you says so on every view; its **Decisions** tab holds a card per decision with the recommendation, the options and links to what it's about. `Enter` takes the recommendation, `1`–`9` picks an option, `r` requests changes. If the Claude Code session that asked is open, Claude carries on within seconds, with nothing typed.
-- **See everything.** Specs (waiting on you first, then latest activity), requirements and scenarios, sketches, plans by vertical with their designs, diagrams and tasks, the build, the verify result (green once only checks a person must do are left, shown as "N need a person"), and the pull request with each reviewer's comment and how it was handled.
+- **See everything.** Specs (waiting on you first, then latest activity), requirements and scenarios, sketches, plans by vertical with their designs, diagrams and tasks, the build, and the pull request with each reviewer's comment and how it was handled.
 - **Find anything.** `⌘ /` searches every spec, requirement, scenario, decision, plan, task and pattern, and every item has a link you can share.
 
 It writes nothing but your decisions. Specs and plans stay plain markdown in your local workspace.
