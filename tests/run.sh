@@ -430,7 +430,8 @@ echo "# build progress"
 TD="$(pwd)/$P/scripts/task-done.sh"
 tmp=$(mktemp -d); mkdir -p "$tmp/.factree/work"; cp -R tests/validate-plan/verticals/plan "$tmp/.factree/work/007-widget-export"
 rv() { FACTREE_HOME="$1/.factree" bash $EVENT task.reviewed 007-widget-export "{\"task\":\"$2\",\"spec\":\"$3\",\"quality\":\"${4:-pass}\"}"; }
-for t in T1 T2 T3; do rv "$tmp" $t pass; done
+rvs() { FACTREE_HOME="$1/.factree" bash $EVENT agent.started 007-widget-export "{\"role\":\"review\",\"task\":\"$2\",\"model\":\"sonnet\"}"; }   # the reviewer the hook would have logged
+for t in T1 T2 T3; do rvs "$tmp" $t; rv "$tmp" $t pass; done
 out=$(FACTREE_HOME="$tmp/.factree" bash "$TD" 007-widget-export T1 abc1234 120 "npm test")
 check "marking a task done ticks its steps and logs it [build#R4.S1]" '! awk "/^### T1:/{f=1;next} /^### /{f=0} f" "$tmp/.factree/work/007-widget-export/backend/tasks.md" | grep -q "^- \[ \]" && grep -q "\"type\":\"task.done\",\"work\":\"007-widget-export\".*\"task\":\"T1\",\"commit\":\"abc1234\",\"lines\":120" "$tmp/.factree/events.jsonl" && awk "/^### T3:/{f=1;next} f" "$tmp/.factree/work/007-widget-export/backend/tasks.md" | grep -q "^- \[ \]"'
 FACTREE_HOME="$tmp/.factree" bash $EVENT task.failed 007-widget-export '{"task":"T2","reason":"over budget"}'
@@ -443,16 +444,33 @@ rm -rf "$tmp"
 rtmp() { tmp=$(mktemp -d); mkdir -p "$tmp/.factree/work"; cp -R tests/validate-plan/verticals/plan "$tmp/.factree/work/007-widget-export"; }
 tdr() { FACTREE_HOME="$tmp/.factree" bash "$TD" 007-widget-export T2 abc1234 60 "npm test" 2>&1; echo "rc=$?"; }
 t2open() { awk "/^### T2:/{f=1;next} /^### /{f=0} f" "$tmp/.factree/work/007-widget-export/"*/tasks.md | grep -q "^- \[ \]"; }
-rtmp; rv "$tmp" T2 pass; out=$(tdr)
+rtmp; rvs "$tmp" T2; rv "$tmp" T2 pass; out=$(tdr)
 check "reviewed and passing is marked [parallel-build#R5.S1]" 'echo "$out" | grep -q "^T2 done$" && echo "$out" | grep -q "rc=0" && ! t2open'
 rtmp; out=$(tdr)
 check "never reviewed exits 3, ticks and logs nothing [parallel-build#R5.S2]" 'echo "$out" | grep -q "^T2 has no passing review$" && echo "$out" | grep -q "rc=3" && t2open && ! grep -q task.done "$tmp/.factree/events.jsonl" 2>/dev/null'
-rtmp; rv "$tmp" T2 fail; out=$(tdr)
+rtmp; rvs "$tmp" T2; rv "$tmp" T2 fail; out=$(tdr)
 check "a failed review blocks [parallel-build#R5.S3]" 'echo "$out" | grep -q "rc=3" && t2open'
-rtmp; rv "$tmp" T2 pass; rv "$tmp" T2 fail; FACTREE_HOME="$tmp/.factree" bash $EVENT task.reviewed 007-widget-export '{"task":"T2","round":2,"cause":"spec"}'; out=$(tdr)
+rtmp; rvs "$tmp" T2; rv "$tmp" T2 pass; rv "$tmp" T2 fail; FACTREE_HOME="$tmp/.factree" bash $EVENT task.reviewed 007-widget-export '{"task":"T2","round":2,"cause":"spec"}'; out=$(tdr)
 check "a pass then a failing re-review blocks [parallel-build#R5.S4]" 'echo "$out" | grep -q "rc=3" && t2open'
-rtmp; FACTREE_HOME="$tmp/.factree" bash $EVENT task.reviewed 008-other '{"task":"T2","spec":"pass","quality":"pass"}'; out=$(tdr)
+rtmp; rvs "$tmp" T2; FACTREE_HOME="$tmp/.factree" bash $EVENT task.reviewed 008-other '{"task":"T2","spec":"pass","quality":"pass"}'; out=$(tdr)
 check "another plan's review doesn't count [parallel-build#R5.S5]" 'echo "$out" | grep -q "rc=3" && t2open'
+rtmp; rv "$tmp" T2 pass; out=$(tdr)
+check "a review event without a reviewer subagent exits 3 [parallel-build#R5.S6]" 'echo "$out" | grep -q "^T2 has no reviewer subagent$" && echo "$out" | grep -q "rc=3" && t2open && ! grep -q task.done "$tmp/.factree/events.jsonl"'
+rm -rf "$tmp"
+
+echo "# agent hook"
+AH="$(pwd)/$P/scripts/agent-hook.sh"
+tmp=$(mktemp -d); mkdir -p "$tmp/.factree"
+ah() { printf "{\"session_id\":\"s1\",\"hook_event_name\":\"PreToolUse\",\"cwd\":\"$1\",\"tool_name\":\"Agent\",\"tool_input\":{\"description\":\"$2\",\"prompt\":\"do it\",\"subagent_type\":\"general-purpose\",\"model\":\"sonnet\"}}" | bash "$AH"; }
+out=$(ah "$tmp" "Review 059-x T5")
+check "a reviewer start is logged with role, task and model [parallel-build#R7.S1]" '[ -z "$out" ] && grep -q "\"type\":\"agent.started\",\"work\":\"059-x\".*\"data\":{\"role\":\"review\",\"task\":\"T5\",\"model\":\"sonnet\"}" "$tmp/.factree/events.jsonl"'
+ah "$tmp" "Explore the auth code"; ah "$tmp" "Reviewing 059-x T5"
+check "other subagents log nothing [parallel-build#R7.S2]" '[ $(wc -l < "$tmp/.factree/events.jsonl") -eq 1 ]'
+ah "$tmp" "Build 059-x T5"; check "a builder start is logged as build [parallel-build#R7.S1]" 'grep -q "\"role\":\"build\",\"task\":\"T5\"" "$tmp/.factree/events.jsonl"'
+rm -rf "$tmp"; tmp=$(mktemp -d); mkdir -p "$tmp/repo"
+out=$(cd "$tmp/repo" && ah "$tmp/repo" "Review 059-x T5" 2>&1)
+check "no workspace, nothing written or printed [parallel-build#R7.S3]" '[ -z "$out" ] && [ -z "$(find "$tmp" -name events.jsonl)" ] && [ ! -e "$tmp/repo/.factree" ]'
+rm -rf "$tmp"
 rm -rf "$tmp"
 
 echo "# verify"
