@@ -147,9 +147,13 @@ function activityOf(id, events, plans, now) {
 		if (e.type === "agent.started") {
 			const task = String(e.data.task ?? ""), role = String(e.data.role ?? "");
 			if (role === "review" && task === "branch") probing = true;
-			else if (role === "review") reviewers.add(task);
-			else if (role === "build") builders.add(task);
-			else continue;
+			else if (role === "review") {
+				builders.delete(task);
+				reviewers.add(task);
+			} else if (role === "build") {
+				reviewers.delete(task);
+				builders.add(task);
+			} else continue;
 			if (!cur?.asking) cur = {
 				stage: "build",
 				label: "Building",
@@ -215,12 +219,12 @@ function activityOf(id, events, plans, now) {
 		if (probing) {
 			cur.label = "Probing the branch";
 			cur.step = "";
-		} else if (reviewers.size && !builders.size) {
-			cur.label = "Reviewing";
-			cur.step = list(reviewers);
 		} else if (builders.size) {
 			cur.label = "Building";
-			cur.step = list(builders);
+			cur.step = list(builders) + (reviewers.size ? ` · Reviewing ${list(reviewers)}` : "");
+		} else if (reviewers.size) {
+			cur.label = "Reviewing";
+			cur.step = list(reviewers);
 		}
 	}
 	if (cur.label === "Building" && !cur.step) {
@@ -1317,16 +1321,18 @@ function branchReviewOf(work, events) {
 	for (const e of events) {
 		if (e.work !== work) continue;
 		const d = e.data, branch = d.task === "branch";
-		if (e.type === "agent.started" && d.role === "review" && branch) br = {
-			phase: "probing",
-			findings: [],
-			notProbed: [],
-			rounds: [],
-			verdict: "",
-			must: 0,
-			should: 0
-		};
-		else if (e.type === "task.reviewed" && branch) {
+		if (e.type === "agent.started" && d.role === "review" && branch) {
+			if (br?.phase === "fixing") br.phase = "probing";
+			else br = {
+				phase: "probing",
+				findings: [],
+				notProbed: [],
+				rounds: [],
+				verdict: "",
+				must: 0,
+				should: 0
+			};
+		} else if (e.type === "task.reviewed" && branch) {
 			br ??= {
 				phase: "probing",
 				findings: [],

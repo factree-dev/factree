@@ -113,8 +113,8 @@ export function activityOf(id: string, events: FactreeEvent[], plans: Plan[], no
     if (e.type === "agent.started") {
       const task = String(e.data.task ?? ""), role = String(e.data.role ?? "");
       if (role === "review" && task === "branch") probing = true;
-      else if (role === "review") reviewers.add(task);
-      else if (role === "build") builders.add(task);
+      else if (role === "review") { builders.delete(task); reviewers.add(task); }
+      else if (role === "build") { reviewers.delete(task); builders.add(task); }
       else continue;
       if (!cur?.asking) cur = { stage: "build", label: "Building", step: "", since: e.ts, paused: false, asking: false };
       continue;
@@ -134,8 +134,8 @@ export function activityOf(id: string, events: FactreeEvent[], plans: Plan[], no
   const list = (x: Set<string>) => [...x].sort().join(", ");
   if (!cur.asking && cur.stage === "build" && cur.label !== "Self-reviewing") {
     if (probing) { cur.label = "Probing the branch"; cur.step = ""; }
-    else if (reviewers.size && !builders.size) { cur.label = "Reviewing"; cur.step = list(reviewers); }
-    else if (builders.size) { cur.label = "Building"; cur.step = list(builders); }
+    else if (builders.size) { cur.label = "Building"; cur.step = list(builders) + (reviewers.size ? ` · Reviewing ${list(reviewers)}` : ""); }
+    else if (reviewers.size) { cur.label = "Reviewing"; cur.step = list(reviewers); }
   }
   if (cur.label === "Building" && !cur.step) {
     const p = plans[0];

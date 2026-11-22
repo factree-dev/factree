@@ -77,6 +77,14 @@ describe("build stage", () => {
   });
 });
 
+describe("branch review fix rounds", () => {
+  it("a re-review keeps the rounds and first-pass findings [build-visibility#R3.S3]", () => {
+    log([...doneAll, probing, ev(2, "task.reviewed", { task: "branch", findings: [finding("should-fix")], not_probed: [] }), ev(2, "task.fixing", { task: "branch", round: 1, cause: "should-fix" }),
+      ev(1, "agent.started", { role: "review", task: "branch", model: "opus" }), ev(1, "task.reviewed", { task: "branch", round: 1, cause: "should-fix" }), ev(1, "branch.reviewed", { verdict: "ready", must: 0, should: 0 })]);
+    expect(plan().branchReview).toMatchObject({ phase: "ended", verdict: "ready", rounds: [{ round: 1, cause: "should-fix" }], findings: [{ severity: "should-fix" }] });
+  });
+});
+
 describe("activity names the task", () => {
   it("two builders read Building T2, T4 [build-visibility#R4.S1]", () => {
     log([ev(5, "stage.step", { stage: "build" }), ev(4, "agent.started", { role: "build", task: "T2", model: "m" }), ev(3, "agent.started", { role: "build", task: "T4", model: "m" })]);
@@ -85,6 +93,12 @@ describe("activity names the task", () => {
   it("a task reviewer reads Reviewing T3", () => {
     log([ev(5, "stage.step", { stage: "build" }), ev(3, "agent.started", { role: "review", task: "T3", model: "m" })]);
     expect(activityText(state().activity!)).toBe("Reviewing… T3");
+  });
+  it("a reviewer replaces its builder [build-visibility#R4.S1]", () => {
+    log([ev(5, "stage.step", { stage: "build" }), ev(4, "agent.started", { role: "build", task: "T3", model: "m" }), ev(3, "agent.started", { role: "review", task: "T3", model: "m" })]);
+    expect(activityText(state().activity!)).toBe("Reviewing… T3");
+    log([ev(5, "stage.step", { stage: "build" }), ev(4, "agent.started", { role: "build", task: "T3", model: "m" }), ev(3, "agent.started", { role: "build", task: "T4", model: "m" }), ev(2, "agent.started", { role: "review", task: "T3", model: "m" })]);
+    expect(activityText(state().activity!)).toBe("Building… T4 · Reviewing T3");
   });
   it("Probing the branch [build-visibility#R4.S2]", () => {
     log([...doneAll, probing]);
