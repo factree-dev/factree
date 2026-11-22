@@ -1,3 +1,5 @@
+import { vi } from "vitest";
+vi.mock("../src/features.ts", () => ({ VERIFY_ON: true }));   // these cases are verify on (verify-paused R6)
 import { progressOf } from "../src/progress.ts";
 import { describe, it, expect } from "vitest";
 import { createElement } from "react";

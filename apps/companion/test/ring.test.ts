@@ -1,3 +1,5 @@
+import { vi } from "vitest";
+vi.mock("../src/features.ts", () => ({ VERIFY_ON: true }));   // these cases are verify on (verify-paused R6)
 import { describe, it, expect, beforeEach } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
