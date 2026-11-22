@@ -1,6 +1,6 @@
 ---
 name: spec
-description: Factree builds every feature through a spec first. Use this before writing any code whenever the user asks to implement, build, add or change a feature, ticket or behaviour in a repository (pasted tickets included), and when they want to specify a feature or update an existing spec. Turns the requirement into .factree/specs/<capability>.md grounded in the code, then the flow plans, builds and verifies it. Not for questions about how code works.
+description: Factree builds every feature through a spec first. Use this before writing any code whenever the user asks to implement, build, add or change a feature, ticket or behaviour in a repository (pasted tickets included), and when they want to specify a feature or update an existing spec. Turns the requirement into .factree/specs/<capability>.md grounded in the code, then the flow plans and builds it. Not for questions about how code works.
 argument-hint: "[requirement text, file path, URL or ticket id]"
 ---
 
@@ -30,7 +30,7 @@ This skill writes only files under `.factree/`. It never writes or edits product
 - Without background commands (another harness), skip the wait; the hook still delivers decisions with the next message.
 - **A spec approved in the companion** is approved like one approved here: carry on as **On approval** says.
 
-**The flow runs on its own** (factory-flow): Factree is a factory. Once nothing needs the user, go straight on to the next stage in the same session, saying one line as it starts ("Planning link-report."). Stop only for a decision brief, an approval the user must give, a failed or blocked task, or the verify result; never to ask whether to start the next stage. Never push, open a pull request or merge. With `flow: step` in the preferences, stop after this stage instead and say which comes next.
+**The flow runs on its own** (factory-flow): Factree is a factory. Once nothing needs the user, go straight on to the next stage in the same session, saying one line as it starts ("Planning link-report."). Stop only for a decision brief, an approval the user must give, or a failed or blocked task; never to ask whether to start the next stage. Never push, open a pull request or merge. With `flow: step` in the preferences, stop after this stage instead and say which comes next.
 
 **Preferences:** read `<workspace>/preferences.md` if it exists (format and keys: `<plugin>/shared/preferences.md`). A line `key: value` not starting with `#` sets a key. A missing file or key means the default. Say once, in a line, if it sets a key you don't know (e.g. `approve_specs`) or a value you don't know, and ignore it. Preferences never approve a spec, or a compact spec and plan: a person always does.
 
@@ -67,9 +67,9 @@ Never ask the user something the code, the existing specs or the source already 
 
 ### 4. Size the request
 
-Every change goes through the factory, down to one line of copy or styling: there is always a spec, however small, and the work is planned, built, verified and sent for review like any other (factory-flow R7). A request is never answered with "no spec needed". From what recon showed, size the request and say so in **one line**, with the reason and how to override it, before asking anything:
+Every change goes through the factory, down to one line of copy or styling: there is always a spec, however small, and the work is planned, built and sent for review like any other (factory-flow R7). A request is never answered with "no spec needed". From what recon showed, size the request and say so in **one line**, with the reason and how to override it, before asking anything:
 
-- **Tiny:** copy, styling, refactors, dependency bumps, renames, typos, internal tooling, performance work. A spec with one requirement and its scenarios, and a one-task plan, written in the same run and approved by the flow when nothing is open; then build, verify and review as usual. A styling choice the user made is recorded as a decision. For a change meant to keep behaviour the same (a refactor, a rename, a bump), the requirement says so and names the existing scenarios that prove it. *"Tiny: a styling change, so a one-requirement spec and a one-task plan, straight through the factory."*
+- **Tiny:** copy, styling, refactors, dependency bumps, renames, typos, internal tooling, performance work. A spec with one requirement and its scenarios, and a one-task plan, written in the same run and approved by the flow when nothing is open; then build and review as usual. A styling choice the user made is recorded as a decision. For a change meant to keep behaviour the same (a refactor, a rename, a bump), the requirement says so and names the existing scenarios that prove it. *"Tiny: a styling change, so a one-requirement spec and a one-task plan, straight through the factory."*
 - **Compact:** up to 3 requirements, in one vertical, needing no new pattern, dependency or lens. A short spec, then a plan in the same run, approved together (step 11). *"Compact: one frontend change, about 2 requirements, nothing new, so the spec and plan come for approval together. Say 'treat as standard' to override."*
 - **Standard:** everything else. The full flow, with the plan left to `/factree:plan`. Say why, e.g. "spans two verticals".
 - **Bug fix:** no new spec. If a spec exists for the area, add a scenario for the case the bug revealed. If none exists, say so and ask whether they want one.
@@ -96,7 +96,7 @@ Split the input into atomic statements and sort each one:
 | Out of scope | "scheduled exports later" | Scope → Out |
 | Already true in the code | "admins can see teams" | Observations, not a requirement |
 
-**What this workspace has learned** (self-improving R6): if `<workspace>/checklists/spec.md` exists, ask its questions as well as the built-in ones; if `<workspace>/defaults.md` exists, its lines are defaults for your calls (still listed, still overrulable). **Lessons approved earlier** (self-improving R8.S3): at the start of a run, look in `<workspace>/events.jsonl` for `lesson.approved` keys whose change isn't yet in its file (no `<!-- lesson <key>` comment there). Apply each first, as verify's step 5 describes, and say so in one line.
+**What this workspace has learned** (self-improving R6): if `<workspace>/checklists/spec.md` exists, ask its questions as well as the built-in ones; if `<workspace>/defaults.md` exists, its lines are defaults for your calls (still listed, still overrulable). **Lessons approved earlier** (self-improving R8.S3): at the start of a run, look in `<workspace>/events.jsonl` for `lesson.approved` keys whose change isn't yet in its file (no `<!-- lesson <key>` comment there). Apply each first, as build's lessons step describes, and say so in one line.
 
 Then find what the requirement is **silent** on. Run through `checklist.md`, plus the **Gaps to check** in each loaded lens (a frontend change gets asked about loading, empty and error states; a backend change about idempotency and concurrency). Each gap that applies and the source doesn't settle becomes a scenario in step 9, or an open question if the answer isn't clear. A case the source already settles comes from the source, not from a second scenario.
 
