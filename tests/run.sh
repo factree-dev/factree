@@ -454,6 +454,8 @@ rtmp; rvs "$tmp" T2; rv "$tmp" T2 pass; rv "$tmp" T2 fail; FACTREE_HOME="$tmp/.f
 check "a pass then a failing re-review blocks [parallel-build#R5.S4]" 'echo "$out" | grep -q "rc=3" && t2open'
 rtmp; rvs "$tmp" T2; FACTREE_HOME="$tmp/.factree" bash $EVENT task.reviewed 008-other '{"task":"T2","spec":"pass","quality":"pass"}'; out=$(tdr)
 check "another plan's review doesn't count [parallel-build#R5.S5]" 'echo "$out" | grep -q "rc=3" && t2open'
+rtmp; rvs "$tmp" branch; rv "$tmp" T2 pass; out=$(tdr)
+check "a branch reviewer doesn't satisfy a task's gate [build-visibility#R5.S1]" 'echo "$out" | grep -q "^T2 has no reviewer subagent$" && echo "$out" | grep -q "rc=3"'
 rtmp; rv "$tmp" T2 pass; out=$(tdr)
 check "a review event without a reviewer subagent exits 3 [parallel-build#R5.S6]" 'echo "$out" | grep -q "^T2 has no reviewer subagent$" && echo "$out" | grep -q "rc=3" && t2open && ! grep -q task.done "$tmp/.factree/events.jsonl"'
 rm -rf "$tmp"
@@ -470,6 +472,10 @@ check "a reviewer start is logged with role, task and model [parallel-build#R7.S
 ah "$tmp" "Explore the auth code"; ah "$tmp" "Reviewing 059-x T5"
 check "other subagents log nothing [parallel-build#R7.S2]" '[ $(wc -l < "$tmp/.factree/events.jsonl") -eq 1 ]'
 ah "$tmp" "Build 059-x T5"; check "a builder start is logged as build [parallel-build#R7.S1]" 'grep -q "\"role\":\"build\",\"task\":\"T5\"" "$tmp/.factree/events.jsonl"'
+ah "$tmp" "Review 061-x branch"; ah "$tmp" "Review 061-x branched"
+check "the branch reviewer is recorded [build-visibility#R5.S1]" '[ $(grep -c "\"work\":\"061-x\"" "$tmp/.factree/events.jsonl") -eq 1 ] && grep -q "\"work\":\"061-x\".*\"data\":{\"role\":\"review\",\"task\":\"branch\",\"model\":\"sonnet\"}" "$tmp/.factree/events.jsonl"'
+FACTREE_HOME="$tmp/.factree" bash $EVENT task.fixing 061-x '{"task":"branch","round":1,"cause":"x"}'; FACTREE_HOME="$tmp/.factree" bash $EVENT branch.reviewed 061-x '{"verdict":"ready","must":0,"should":1}'
+check "event.sh logs task.fixing and branch.reviewed on the work [build-visibility#R5.S2]" 'grep -q "\"type\":\"task.fixing\",\"work\":\"061-x\"" "$tmp/.factree/events.jsonl" && grep -q "\"type\":\"branch.reviewed\",\"work\":\"061-x\"" "$tmp/.factree/events.jsonl"'
 rm -rf "$tmp"; tmp=$(mktemp -d); mkdir -p "$tmp/repo"
 out=$(cd "$tmp/repo" && ah "$tmp/repo" "Review 059-x T5" 2>&1)
 check "no workspace, nothing written or printed [parallel-build#R7.S3]" '[ -z "$out" ] && [ -z "$(find "$tmp" -name events.jsonl)" ] && [ ! -e "$tmp/repo/.factree" ]'

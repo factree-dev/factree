@@ -215,6 +215,11 @@ Every case must also pass:
 **Expect:** before the pull request, the build proposes both as one brief (`lesson.proposed`) and waits as for any decision. With no candidates it says nothing about lessons [R2.S3].
 **Before the change:** verify proposed them after its result.
 
+## Branch review end logged [build-visibility#R5.S2]
+
+**Setup:** a build whose whole-branch review finds one should-fix and one must-fix, then fixes both.
+**Expect:** the reviewer subagent is `Review <work> branch`; `task.fixing` for `branch` is logged before the fix round; `branch.reviewed` with `"verdict":"ready"`, `must` 0 and `should` 0 is logged after the re-review, before the hand-over. If the must-fix stays open: `task.failed` and `branch.reviewed` with `"verdict":"fix first"` and `must` 1 [R5.S2].
+
 ---
 
 ## Results
