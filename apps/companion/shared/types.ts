@@ -209,7 +209,7 @@ export interface PlanBrief { work: string; status: PlanStatus; approvedAt: strin
 // The newest pull request for a plan, from review.* events (review R8). state: OPEN, CHANGES_REQUESTED, APPROVED, MERGED or CLOSED.
 export interface ReviewComment { author: string; path: string; line: string; body: string; handled: string | null }
 // One pull request, keyed by repo and number (multi-repo R9); repo "" is the workspace's only repo.
-export interface PullRequest { repo: string; number: string; url: string; base: string; tasks: string[]; state: string; comments: ReviewComment[] }
+export interface PullRequest { repo: string; number: string; url: string; base: string; tasks: string[]; after: string[]; state: string; comments: ReviewComment[] }
 // url, state and comments are the newest pull request's; prs lists every one (oldest first).
 export interface ReviewInfo { url: string; state: string; comments: ReviewComment[]; prs?: PullRequest[] }
 

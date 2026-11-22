@@ -1213,12 +1213,15 @@ function reviewOf(work, events) {
 		}));
 		const t = opened.data.tasks;
 		const tasks = Array.isArray(t) ? t.map(String) : t ? String(t).split(/[,\s]+/).filter(Boolean) : [];
+		const af = opened.data.after;
+		const after = Array.isArray(af) ? af.map(String) : af ? String(af).split(/[,\s]+/).filter(Boolean) : [];
 		return {
 			repo: String(opened.data.repo ?? ""),
 			number: String(opened.data.pr ?? ""),
 			url: String(opened.data.url ?? ""),
 			base: String(opened.data.base ?? ""),
 			tasks,
+			after,
 			state: String(state ?? "OPEN"),
 			comments
 		};

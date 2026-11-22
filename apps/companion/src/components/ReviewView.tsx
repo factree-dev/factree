@@ -34,6 +34,7 @@ export function ReviewView({ detail }: { detail: SpecDetail }) {
               <div className="meta">
                 <a href={x.url} target="_blank" rel="noreferrer">#{x.number}</a>
                 {x.tasks.length > 0 && <><span aria-hidden="true">·</span><span className="mono">{x.tasks.join(", ")}</span></>}
+                {x.after.length > 0 && <><span aria-hidden="true">·</span><span>after <span className="mono">{x.after.join(", ")}</span></span></>}
                 {x.base && <><span aria-hidden="true">·</span><span>base <span className="mono">{x.base}</span></span></>}
                 <span aria-hidden="true">·</span><span className={`review-state ${x.state.toLowerCase()}`}>{reviewLabel(x.state)}</span>
               </div>

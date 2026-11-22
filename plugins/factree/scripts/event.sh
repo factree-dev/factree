@@ -3,7 +3,7 @@
 # Usage: event.sh <type> <subject-id> ['<json object>']
 #   subject-id is a spec id for spec.*, question.*, decision.*; a work id for plan.*
 # Example: event.sh spec.approved link-report '{"by":"John Doe"}'
-# Pull request events (multi-repo R8): review.opened {pr,url,repo,tasks,base}; review.comment, review.state and
+# Pull request events (multi-repo R8): review.opened {pr,url,repo,tasks,base,after} (after: optional list of "repo#number" PRs to merge first); review.comment, review.state and
 # review.reply carry the same "repo" (a repo folder as in repos.md). An event without "repo" is the only repo's.
 # Inside Claude Code, the event also records the session (CLAUDE_CODE_SESSION_ID).
 
