@@ -357,6 +357,26 @@ git -C "$tmp/ws/frontend" remote set-url origin https://gitlab.com/acme/frontend
 check "a non-GitHub remote stops the follower with one line" 'grep -q "^review: frontend.s origin is not a GitHub remote" "$tmp/out" && [ $(wc -l < "$tmp/out") -eq 1 ]'
 rm -rf "$tmp"
 
+echo "# review catch-up, several repos"
+tmp=$(mktemp -d); mkdir -p "$tmp/ws/.factree" "$tmp/bin"; : > "$tmp/ws/.factree/events.jsonl"
+for r in backend frontend infra; do mkdir -p "$tmp/ws/$r"; git -C "$tmp/ws/$r" init -q; done
+git -C "$tmp/ws/backend" remote add origin https://github.com/acme/backend.git
+git -C "$tmp/ws/frontend" remote add origin git@github.com:acme/frontend.git
+git -C "$tmp/ws/infra" remote add origin ssh://git@github.com/acme/infra.git
+cat > "$tmp/bin/gh" <<'GH'
+#!/usr/bin/env bash
+echo "$*" >> "$(dirname "$0")/calls"; [ "$1" = pr ] && echo "OPEN MERGEABLE REVIEW_REQUIRED"; exit 0
+GH
+chmod +x "$tmp/bin/gh"
+for r in backend frontend; do (cd "$tmp/ws/$r" && bash $EVENT review.opened 062-x "{\"pr\":\"7\",\"url\":\"u\",\"repo\":\"$r\",\"base\":\"main\"}"); done
+(cd "$tmp/ws/backend" && bash $EVENT review.state 062-x '{"pr":"7","state":"MERGED","repo":"backend"}')
+(cd "$tmp/ws/frontend" && PATH="$tmp/bin:/usr/bin:/bin" bash "$CU" >/dev/null 2>&1)
+check "catch-up skips the merged #7 in backend and still checks frontend's #7 [multi-repo#R8.S3]" '! grep -q "acme/backend" "$tmp/bin/calls" && grep -q "^pr view 7 -R acme/frontend" "$tmp/bin/calls"'
+(cd "$tmp/ws/infra" && bash $EVENT review.opened 062-y '{"pr":"3","url":"u","repo":"infra","base":"main"}')
+: > "$tmp/bin/calls"; (cd "$tmp/ws/infra" && PATH="$tmp/bin:/usr/bin:/bin" bash "$WR" 062-y infra --once >/dev/null 2>&1)
+check "an ssh:// origin parses to acme/infra" 'grep -q "^pr view 3 -R acme/infra" "$tmp/bin/calls"'
+rm -rf "$tmp"
+
 echo "# review catch-up"
 CU="$(pwd)/$P/scripts/review-catchup.sh"
 tmp=$(mktemp -d); mkdir -p "$tmp/ws/.factree" "$tmp/ws/repo" "$tmp/bin" "$tmp/nogh"; : > "$tmp/ws/.factree/events.jsonl"
