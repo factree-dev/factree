@@ -1,3 +1,4 @@
+import { VERIFY_ON } from "./features.ts";
 // Turn a line of spec markdown into tokens, linking everything that points somewhere:
 // URLs, code paths (to the repo on GitHub), IDs in this spec (R2, R2.S1, O3, D1, Q2)
 // IDs in other specs (link-report#R2.S1), and, in a plan, tasks (T2), patterns (P1) and markdown links.
@@ -94,7 +95,7 @@ export function parsePath(pathname: string): Route {
     if (ref && !REF.test(ref)) return r;
     return { ...r, page: "spec", spec, tab: s[3] === "requirements" ? null : s[3]!, ref };
   }
-  if (stage === "verify") return s.length === 3 ? { ...r, page: "verify", spec, tab: "verify" } : r;
+  if (stage === "verify") return s.length === 3 ? (VERIFY_ON ? { ...r, page: "verify", spec, tab: "verify" } : { ...r, page: "spec", spec }) : r;   // paused: the spec page (verify-paused R4.S2)
   if (stage === "review") return s.length === 3 ? { ...r, page: "review", spec, tab: "review" } : r;   // review R8
   if (stage === "build") {
     if (s.length > 4 || (s[3] && !/^[\w.-]+$/.test(s[3]))) return r;

@@ -144,7 +144,7 @@ function activityOf(id, events, plans, now) {
 			asking: false
 		};
 		else if (e.type === "stage.step") {
-			const [stage, label] = STAGE_LABEL[String(e.data.stage)] ?? [];
+			const [stage, label] = e.data.stage === "verify" ? [] : STAGE_LABEL[String(e.data.stage)] ?? [];
 			if (stage && label) cur = {
 				stage,
 				label,
@@ -1471,9 +1471,6 @@ var sectionOf = (ref) => /^R\d/.test(ref) ? "requirements" : /^D\d/.test(ref) ? 
 function specPath(specId) {
 	return `/work/${specId}/spec`;
 }
-function verifyHref(specId) {
-	return `/work/${specId}/verify`;
-}
 /** A spec item (R2, R2.S1, D1, Q2, O3) in the section that holds it, or the spec itself. */
 function refHref(specId, ref) {
 	return ref ? `/work/${specId}/spec/${sectionOf(ref)}/${ref}` : specPath(specId);
@@ -1530,14 +1527,6 @@ function searchIndex(root) {
 				href: planHref(id, newest.work, "build")
 			});
 		}
-		out.push({
-			kind: "Stage",
-			id,
-			title: `Verify · ${id}`,
-			text: "",
-			context: id,
-			href: verifyHref(id)
-		});
 		for (const r of s.requirements) {
 			out.push({
 				kind: "Requirement",

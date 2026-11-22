@@ -1,16 +1,18 @@
 import { useState } from "react";
 import type { Spec, VerifyResult, ScenarioStatus } from "../../shared/types.ts";
+import { VERIFY_ON } from "../features.ts";
 import { layoutFlow, type FlowArrow } from "../flow.ts";
 
 // The Flow tab (spec spec-flow R2–R4): the spec's flow laid out for reading, each arrow coloured by the scenarios that
 // prove it, the steps no scenario covers listed, and any scenario played along its path.
 
-type Coverage = "ok" | "bad" | "none" | "gap";
+type Coverage = "ok" | "bad" | "none" | "gap" | "neutral";
 const RANK: Record<ScenarioStatus, number> = { failing: 2, unverified: 1, proved: 0 };
 
 /** The worst status among an arrow's scenarios, or a gap when it cites none (R3). */
 function coverage(a: FlowArrow, verify: VerifyResult | null): Coverage {
   if (!a.cites.length) return "gap";
+  if (!VERIFY_ON) return "neutral";   // verify paused: no proved or failing colours (verify-paused R4.S3)
   const worst = Math.max(...a.cites.map((id) => RANK[verify?.results[id]?.status ?? "unverified"]));
   return worst === 2 ? "bad" : worst === 1 ? "none" : "ok";
 }
@@ -73,7 +75,7 @@ export function FlowView({ spec, verify, playing: playing0 = null, step: step0 =
           <h3 className="dgroup">Scenarios</h3>
           <ul className="flow-scns">
             {cited.map((id) => {
-              const st = verify?.results[id]?.status ?? "unverified";
+              const st = VERIFY_ON ? verify?.results[id]?.status ?? "unverified" : "";
               return <li key={id}><button type="button" className={`flow-scn${playing === id ? " sel" : ""}`} onClick={() => pick(id)}><i className={`fdot ${st}`} /><span className="mono">{id}</span><span>{steps(spec, id).name}</span></button></li>;
             })}
           </ul>

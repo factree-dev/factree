@@ -2,6 +2,7 @@
 
 import { LIVE_WINDOW_MS, PAUSED_AFTER_MS } from "../shared/config.ts";
 import { sep } from "node:path";
+import { VERIFY_ON } from "../src/features.ts";
 import type { AskedQuestion, DisplayStatus, FactreeEvent, Live, Plan, Session, SessionRef, SessionState, Spec, SpecStatus, WritingStep, Activity } from "../shared/types.ts";
 
 /** Sessions that logged matching events, newest first, each with its last event time (spec-sessions R2–R4). */
@@ -106,7 +107,7 @@ export function activityOf(id: string, events: FactreeEvent[], plans: Plan[], no
     if (ENDS.has(e.type)) { cur = null; before = null; continue; }
     if (e.type === "spec.step") cur = { stage: "spec", label: "Writing", step: WRITING_STEP[String(e.data.step)] ?? "", since: e.ts, paused: false, asking: false };
     else if (e.type === "stage.step") {
-      const [stage, label] = STAGE_LABEL[String(e.data.stage)] ?? [];
+      const [stage, label] = !VERIFY_ON && e.data.stage === "verify" ? [] : STAGE_LABEL[String(e.data.stage)] ?? [];   // paused: an old verify step shows nothing
       if (stage && label) cur = { stage, label, step: e.data.stage === "review" ? "" : String(e.data.step ?? ""), since: e.ts, paused: false, asking: false };
     } else if (e.type === "task.started" || e.type === "task.done") {
       if (!cur || cur.label !== "Self-reviewing") cur = { stage: "build", label: "Building", step: "", since: e.ts, paused: false, asking: false };
