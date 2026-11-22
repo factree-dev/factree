@@ -6,7 +6,7 @@
 
 here="$(cd "$(dirname "$0")" && pwd)"
 input=$(cat 2>/dev/null || true)
-# tool_input.description / tool_input.model: nested, so read from the raw JSON (the first match wins).
+# tool_input.description / tool_input.model: nested, so read from the raw JSON (the last match wins).
 desc=$(printf '%s' "$input" | sed -n 's/.*"description"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1)
 model=$(printf '%s' "$input" | sed -n 's/.*"model"[[:space:]]*:[[:space:]]*"\([A-Za-z0-9_.:-]*\)".*/\1/p' | head -n1)
 cwd=$(printf '%s' "$input" | sed -n 's/.*"cwd"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1)
