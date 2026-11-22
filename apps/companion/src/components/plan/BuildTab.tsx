@@ -6,7 +6,7 @@ import { CopyCommand } from "../bits.tsx";
 import { planHref } from "../../links.ts";
 
 // The Build tab (build R8): every task in build order with its status, and the commit and lines once done.
-const BUILD_LABEL = { waiting: "Waiting", running: "Running", done: "Done", failed: "Failed", blocked: "Blocked" } as const;
+const BUILD_LABEL = { waiting: "Waiting", running: "Running", done: "Merged", failed: "Failed", blocked: "Blocked" } as const;
 
 // The row's live state from the build entry's phase (build-visibility R2).
 function stateText(b: TaskBuild, waitingOn: string[]): string {
@@ -25,8 +25,10 @@ function reviewNotes(b: TaskBuild): string[] {
   if (b.status === "done" && b.model) n.push(b.model);
   return n;
 }
+// Builds log "must"/"should"/"minor" (or "must-fix"/"should-fix"): matched by prefix, as stages.ts does.
 const SEVERITY = ["must-fix", "should-fix", "minor"];
-const rank = (s: string) => { const i = SEVERITY.indexOf(s); return i < 0 ? SEVERITY.length : i; };
+const severity = (s: string) => /^must/i.test(s) ? "must-fix" : /^should/i.test(s) ? "should-fix" : "minor";
+const rank = (s: string) => SEVERITY.indexOf(severity(s));
 
 // The whole-branch review once it starts (build-visibility R3).
 function BranchPanel({ r }: { r: BranchReview }) {
@@ -35,7 +37,7 @@ function BranchPanel({ r }: { r: BranchReview }) {
     <section className="branch-review" aria-label="Branch review">
       <h3>Branch review{r.phase === "probing" && <span className="count"> · Probing</span>}{r.phase === "fixing" && <span className="count"> · Fixing</span>}</h3>
       {findings.length > 0 && <ul className="br-findings">{findings.map((f, i) => (
-        <li key={i}><span className={`sev ${f.severity}`}>{f.severity}</span> {f.text}{f.evidence && <div className="evidence"><code>{f.evidence}</code></div>}</li>
+        <li key={i}><span className={`sev ${severity(f.severity)}`}>{severity(f.severity)}</span> {f.text}{f.evidence && <div className="evidence"><code>{f.evidence}</code></div>}</li>
       ))}</ul>}
       {r.notProbed.length > 0 && <><h4>Not probed</h4><ul>{r.notProbed.map((n, i) => <li key={i}><strong>{n.area}</strong>: {n.reason}</li>)}</ul></>}
       {r.rounds.length > 0 && <ul>{r.rounds.map((x) => <li key={x.round}>Fix round {x.round}: {x.cause}</li>)}</ul>}

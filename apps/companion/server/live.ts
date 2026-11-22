@@ -93,7 +93,7 @@ export function displayStatus(fileStatus: SpecStatus | null, live: Live, lastMov
 
 const WRITING_STEP: Record<string, string> = { gaps: "finding gaps", observe: "reading the code", questions: "asking questions", writing: "", checking: "checking", approval: "finishing" };
 const STAGE_LABEL: Record<string, [Activity["stage"], string]> = {
-  plan: ["plan", "Planning"], build: ["build", "Building"], "self-review": ["build", "Self-reviewing"], verify: ["verify", "Verifying"], review: ["review", "Opening the pull request"],
+  plan: ["plan", "Planning"], build: ["build", "Building"], "self-review": ["build", "Probing the branch"], verify: ["verify", "Verifying"], review: ["review", "Opening the pull request"],
 };
 const ENDS = new Set(["spec.approved", "plan.approved", "task.failed", "task.blocked", "spec.verified", "review.opened", "branch.reviewed"]);
 
@@ -122,17 +122,18 @@ export function activityOf(id: string, events: FactreeEvent[], plans: Plan[], no
     if (e.type === "spec.step") cur = { stage: "spec", label: "Writing", step: WRITING_STEP[String(e.data.step)] ?? "", since: e.ts, paused: false, asking: false };
     else if (e.type === "stage.step") {
       const [stage, label] = !VERIFY_ON && e.data.stage === "verify" ? [] : STAGE_LABEL[String(e.data.stage)] ?? [];   // paused: an old verify step shows nothing
+      if (e.data.stage === "self-review") probing = true;   // the branch review starts with the self-review step (D7)
       if (stage && label) cur = { stage, label, step: e.data.stage === "review" ? "" : String(e.data.step ?? ""), since: e.ts, paused: false, asking: false };
     } else if (e.type === "task.started" || e.type === "task.done") {
       const t = String(e.data.task ?? "");
       if (e.type === "task.done") { builders.delete(t); reviewers.delete(t); }
-      if (!cur || (cur.label !== "Self-reviewing" && !probing)) cur = { stage: "build", label: "Building", step: "", since: e.ts, paused: false, asking: false };
+      if (!cur || !probing) cur = { stage: "build", label: "Building", step: "", since: e.ts, paused: false, asking: false };
     } else if (e.type === "question.asked" && cur) { before = cur.asking ? before : cur; cur = { ...(cur as Activity), label: "Asking you", step: "", since: e.ts, asking: true }; }
     else if (e.type === "question.answered" && cur?.asking && before) { cur = { ...(before as Activity), since: e.ts }; before = null; }
   }
   if (!cur) return null;
   const list = (x: Set<string>) => [...x].sort().join(", ");
-  if (!cur.asking && cur.stage === "build" && cur.label !== "Self-reviewing") {
+  if (!cur.asking && cur.stage === "build") {
     if (probing) { cur.label = "Probing the branch"; cur.step = ""; }
     else if (builders.size) { cur.label = "Building"; cur.step = list(builders) + (reviewers.size ? ` · Reviewing ${list(reviewers)}` : ""); }
     else if (reviewers.size) { cur.label = "Reviewing"; cur.step = list(reviewers); }

@@ -110,7 +110,7 @@ var WRITING_STEP = {
 var STAGE_LABEL = {
 	plan: ["plan", "Planning"],
 	build: ["build", "Building"],
-	"self-review": ["build", "Self-reviewing"],
+	"self-review": ["build", "Probing the branch"],
 	verify: ["verify", "Verifying"],
 	review: ["review", "Opening the pull request"]
 };
@@ -174,6 +174,7 @@ function activityOf(id, events, plans, now) {
 		};
 		else if (e.type === "stage.step") {
 			const [stage, label] = e.data.stage === "verify" ? [] : STAGE_LABEL[String(e.data.stage)] ?? [];
+			if (e.data.stage === "self-review") probing = true;
 			if (stage && label) cur = {
 				stage,
 				label,
@@ -188,7 +189,7 @@ function activityOf(id, events, plans, now) {
 				builders.delete(t);
 				reviewers.delete(t);
 			}
-			if (!cur || cur.label !== "Self-reviewing" && !probing) cur = {
+			if (!cur || !probing) cur = {
 				stage: "build",
 				label: "Building",
 				step: "",
@@ -215,7 +216,7 @@ function activityOf(id, events, plans, now) {
 	}
 	if (!cur) return null;
 	const list = (x) => [...x].sort().join(", ");
-	if (!cur.asking && cur.stage === "build" && cur.label !== "Self-reviewing") {
+	if (!cur.asking && cur.stage === "build") {
 		if (probing) {
 			cur.label = "Probing the branch";
 			cur.step = "";
@@ -1315,33 +1316,46 @@ function buildStatus(plan, events) {
 	}
 	return out;
 }
-/** The branch review of the plan's latest run: a new branch reviewer starts a fresh run, so its findings replace the last's (build-visibility R3). */
-function branchReviewOf(work, events) {
+/** The branch review of the plan's latest run: a new branch reviewer starts a fresh run, so its findings replace the last's (build-visibility R3).
+*  A run opens on the branch reviewer, a branch fix round, or the build's self-review step (D7). Older builds logged the
+*  self-review step and the branch findings but no fix round and no branch.reviewed, so they never open a run: a
+*  self-review step (with any findings after it) stays a run only if a branch reviewer, fix round or branch.reviewed
+*  comes next, or it is the newest and still inside the paused window (R1.S5). */
+function branchReviewOf(work, events, now = Date.now()) {
+	const fresh = (phase) => ({
+		phase,
+		findings: [],
+		notProbed: [],
+		rounds: [],
+		verdict: "",
+		must: 0,
+		should: 0
+	});
 	let br = null;
+	let pending = null;
 	for (const e of events) {
-		if (e.work !== work) continue;
 		const d = e.data, branch = d.task === "branch";
-		if (e.type === "agent.started" && d.role === "review" && branch) {
+		const selfReview = e.type === "stage.step" && d.stage === "self-review" && (d.work === work || e.work === work);
+		if (e.work !== work && !selfReview) continue;
+		const reviewer = e.type === "agent.started" && d.role === "review" && branch;
+		if (pending) {
+			if (reviewer || e.type === "task.fixing" && branch || e.type === "branch.reviewed") pending = null;
+			else if (!(e.type === "task.reviewed" && branch && d.round === void 0)) {
+				br = pending.before;
+				pending = null;
+			}
+		}
+		if (selfReview) {
+			pending = {
+				since: e.ts,
+				before: br
+			};
+			br = fresh("probing");
+		} else if (reviewer) {
 			if (br?.phase === "fixing") br.phase = "probing";
-			else br = {
-				phase: "probing",
-				findings: [],
-				notProbed: [],
-				rounds: [],
-				verdict: "",
-				must: 0,
-				should: 0
-			};
+			else br = fresh("probing");
 		} else if (e.type === "task.reviewed" && branch) {
-			br ??= {
-				phase: "probing",
-				findings: [],
-				notProbed: [],
-				rounds: [],
-				verdict: "",
-				must: 0,
-				should: 0
-			};
+			if (!br || br.phase === "ended") continue;
 			br.phase = "probing";
 			if (d.round !== void 0) {
 				if (!br.rounds.some((r) => r.round === Number(d.round))) br.rounds.push({
@@ -1360,39 +1374,21 @@ function branchReviewOf(work, events) {
 				}));
 			}
 		} else if (e.type === "task.fixing" && branch) {
-			br ??= {
-				phase: "fixing",
-				findings: [],
-				notProbed: [],
-				rounds: [],
-				verdict: "",
-				must: 0,
-				should: 0
-			};
+			br ??= fresh("fixing");
 			br.phase = "fixing";
 			br.rounds = [...br.rounds.filter((r) => r.round !== Number(d.round)), {
 				round: Number(d.round ?? 0),
 				cause: String(d.cause ?? "")
 			}];
-		} else if (e.type === "branch.reviewed") {
-			br ??= {
-				phase: "ended",
-				findings: [],
-				notProbed: [],
-				rounds: [],
-				verdict: "",
-				must: 0,
-				should: 0
-			};
-			br = {
-				...br,
-				phase: "ended",
-				verdict: String(d.verdict ?? ""),
-				must: Number(d.must ?? 0),
-				should: Number(d.should ?? 0)
-			};
-		}
+		} else if (e.type === "branch.reviewed") br = {
+			...br ?? fresh("ended"),
+			phase: "ended",
+			verdict: String(d.verdict ?? ""),
+			must: Number(d.must ?? 0),
+			should: Number(d.should ?? 0)
+		};
 	}
+	if (pending && now - Date.parse(pending.since) > 6e5) br = pending.before;
 	return br;
 }
 /** Every plan in `work/`, newest (highest number) first. A folder with no plan, design or task file isn't a plan (plan-view R11.S3). */

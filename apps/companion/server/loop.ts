@@ -9,6 +9,7 @@ import { parseFrontMatter } from "./parse-spec.ts";
 import { readText, isDir } from "./read.ts";
 import { sessionsFor } from "./live.ts";
 import { VERIFY_ON } from "../src/features.ts";
+import { PAUSED_AFTER_MS } from "../shared/config.ts";
 
 /** The latest spec.verified event for a spec, as counts or with every scenario's result (verify R4). */
 export function latestVerify(id: string, events: FactreeEvent[], withResults: true): VerifyResult | null;
@@ -129,17 +130,30 @@ export function buildStatus(plan: Plan, events: FactreeEvent[]): Record<string, 
   return out;
 }
 
-/** The branch review of the plan's latest run: a new branch reviewer starts a fresh run, so its findings replace the last's (build-visibility R3). */
-export function branchReviewOf(work: string, events: FactreeEvent[]): BranchReview | null {
+/** The branch review of the plan's latest run: a new branch reviewer starts a fresh run, so its findings replace the last's (build-visibility R3).
+ *  A run opens on the branch reviewer, a branch fix round, or the build's self-review step (D7). Older builds logged the
+ *  self-review step and the branch findings but no fix round and no branch.reviewed, so they never open a run: a
+ *  self-review step (with any findings after it) stays a run only if a branch reviewer, fix round or branch.reviewed
+ *  comes next, or it is the newest and still inside the paused window (R1.S5). */
+export function branchReviewOf(work: string, events: FactreeEvent[], now: number = Date.now()): BranchReview | null {
+  const fresh = (phase: BranchReview["phase"]): BranchReview => ({ phase, findings: [], notProbed: [], rounds: [], verdict: "", must: 0, should: 0 });
   let br: BranchReview | null = null;
+  let pending: { since: string; before: BranchReview | null } | null = null;   // a self-review step nothing branch-era has followed yet
   for (const e of events) {
-    if (e.work !== work) continue;
     const d = e.data, branch = d.task === "branch";
-    if (e.type === "agent.started" && d.role === "review" && branch) {
+    const selfReview = e.type === "stage.step" && d.stage === "self-review" && (d.work === work || e.work === work);
+    if (e.work !== work && !selfReview) continue;
+    const reviewer = e.type === "agent.started" && d.role === "review" && branch;
+    if (pending) {
+      if (reviewer || (e.type === "task.fixing" && branch) || e.type === "branch.reviewed") pending = null;
+      else if (!(e.type === "task.reviewed" && branch && d.round === undefined)) { br = pending.before; pending = null; }   // an older build: its self-review step opened nothing
+    }
+    if (selfReview) { pending = { since: e.ts, before: br }; br = fresh("probing"); }
+    else if (reviewer) {
       if (br?.phase === "fixing") br.phase = "probing";   // the re-review after a fix round keeps the rounds and findings
-      else br = { phase: "probing", findings: [], notProbed: [], rounds: [], verdict: "", must: 0, should: 0 };
+      else br = fresh("probing");
     } else if (e.type === "task.reviewed" && branch) {
-      br ??= { phase: "probing", findings: [], notProbed: [], rounds: [], verdict: "", must: 0, should: 0 };
+      if (!br || br.phase === "ended") continue;   // no run open: an older build's findings, which never ended a run
       br.phase = "probing";
       if (d.round !== undefined) { if (!br.rounds.some((r) => r.round === Number(d.round))) br.rounds.push({ round: Number(d.round), cause: String(d.cause ?? "") }); }
       else {
@@ -147,14 +161,14 @@ export function branchReviewOf(work: string, events: FactreeEvent[]): BranchRevi
         br.notProbed = (Array.isArray(d.not_probed) ? d.not_probed as Record<string, unknown>[] : []).map((n) => ({ area: String(n.area ?? ""), reason: String(n.reason ?? "") }));
       }
     } else if (e.type === "task.fixing" && branch) {
-      br ??= { phase: "fixing", findings: [], notProbed: [], rounds: [], verdict: "", must: 0, should: 0 };
+      br ??= fresh("fixing");
       br.phase = "fixing";
       br.rounds = [...br.rounds.filter((r) => r.round !== Number(d.round)), { round: Number(d.round ?? 0), cause: String(d.cause ?? "") }];
     } else if (e.type === "branch.reviewed") {
-      br ??= { phase: "ended", findings: [], notProbed: [], rounds: [], verdict: "", must: 0, should: 0 };
-      br = { ...br, phase: "ended", verdict: String(d.verdict ?? ""), must: Number(d.must ?? 0), should: Number(d.should ?? 0) };
+      br = { ...(br ?? fresh("ended")), phase: "ended", verdict: String(d.verdict ?? ""), must: Number(d.must ?? 0), should: Number(d.should ?? 0) };
     }
   }
+  if (pending && now - Date.parse(pending.since) > PAUSED_AFTER_MS) br = pending.before;   // quiet too long: nothing started
   return br;
 }
 

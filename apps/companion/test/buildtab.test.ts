@@ -23,6 +23,7 @@ describe("Build tab rows", () => {
   });
   it("merged row [build-visibility#R2.S4]", () => {
     const h = html({ T1: { status: "done", phase: "merged", commit: "abc1234", lines: 40, verdict: "pass/pass", reviewerRecorded: true, findings: 2, suggestions: 1, model: "sonnet" } });
+    expect(h).toContain(">Merged<");
     for (const s of ["abc1234", "40 lines", "reviewed ✓", "2 findings · 1 suggestion not built", "sonnet"]) expect(h).toContain(s);
   });
   it("review not recorded [build-visibility#R2.S5]", () => {
@@ -42,6 +43,12 @@ describe("branch review panel", () => {
     expect(h.indexOf("sf")).toBeLessThan(h.indexOf("m1"));
     expect(h.indexOf("m1")).toBeLessThan(h.indexOf("m2"));
     expect(h).toContain("Probing");
+  });
+  it("orders the severities builds log: should before minor [build-visibility#R3.S1]", () => {
+    const h = html({}, panel({ findings: [{ severity: "minor", text: "m1", evidence: "e1" }, { severity: "should", text: "sf", evidence: "e" }, { severity: "minor", text: "m2", evidence: "e2" }, { severity: "must", text: "mu", evidence: "e" }] }));
+    expect(h.indexOf("</span> mu")).toBeLessThan(h.indexOf("</span> sf"));
+    expect(h.indexOf("</span> sf")).toBeLessThan(h.indexOf("</span> m1"));
+    expect(h).toContain('class="sev should-fix"');
   });
   it("not probed with reason [build-visibility#R3.S2]", () => {
     const h = html({}, panel({ notProbed: [{ area: "browser rendering", reason: "no browser here" }] }));

@@ -77,6 +77,44 @@ describe("build stage", () => {
   });
 });
 
+describe("old plans and the review's start", () => {
+  const selfReview = (min: number) => ({ ts: at(min), type: "stage.step", spec: "link-report", data: { stage: "self-review", work: W } });
+  const oldReviewed = (min: number) => ev(min, "task.reviewed", { task: "branch", findings: [finding("should")], not_probed: [] });
+  it("an old-style branch task.reviewed alone leaves an implemented plan done [build-visibility#R1.S5]", () => {
+    implement();
+    log([...doneAll, ev(20, "plan.implemented", {}), oldReviewed(10)]);
+    expect(buildStage(state())).toMatchObject({ sub: "Implemented", done: true });
+    expect(plan().branchReview).toBeNull();
+  });
+  it("an old self-review step followed by an old-style task.reviewed stays done [build-visibility#R1.S5]", () => {
+    implement();
+    log([...doneAll, ev(20, "plan.implemented", {}), selfReview(19), oldReviewed(10), ev(9, "task.reviewed", { task: "branch", round: 1, cause: "should" })]);
+    expect(buildStage(state())).toMatchObject({ sub: "Implemented", done: true });
+    log([...doneAll, ev(20, "plan.implemented", {}), selfReview(19), oldReviewed(15)]);
+    expect(buildStage(state())).toMatchObject({ sub: "Implemented", done: true });
+  });
+  it("findings after the self-review step, then a fix round, stay one run (no reviewer recorded)", () => {
+    implement();
+    log([...doneAll, ev(4, "plan.implemented", {}), selfReview(4), oldReviewed(2), ev(1, "task.fixing", { task: "branch", round: 1, cause: "should" })]);
+    expect(buildStage(state())).toMatchObject({ sub: "branch review: 1 should-fix, fixing", done: false });
+  });
+  it("a self-review step quiet past the paused window stays done", () => {
+    implement();
+    log([...doneAll, ev(20, "plan.implemented", {}), selfReview(15)]);
+    expect(buildStage(state())).toMatchObject({ sub: "Implemented", done: true });
+  });
+  it("the self-review step before the reviewer starts reads as probing [build-visibility#R1.S1, R4.S2]", () => {
+    implement();
+    log([...doneAll, ev(3, "plan.implemented", {}), selfReview(2)]);
+    expect(buildStage(state())).toMatchObject({ sub: "4/4 merged · branch review: probing", done: false });
+    expect(activityText(state().activity!)).toBe("Probing the branch…");
+    log([...doneAll, ev(3, "plan.implemented", {}), selfReview(2), probing, ev(1, "task.reviewed", { task: "branch", findings: [finding("should")], not_probed: [] })]);
+    expect(plan().branchReview).toMatchObject({ phase: "probing", findings: [{ severity: "should" }] });
+    log([...doneAll, ev(3, "plan.implemented", {}), selfReview(2), probing, ev(1, "branch.reviewed", { verdict: "ready", must: 0, should: 0 })]);
+    expect(buildStage(state())).toMatchObject({ sub: "Implemented", done: true });
+  });
+});
+
 describe("branch review fix rounds", () => {
   it("a re-review keeps the rounds and first-pass findings [build-visibility#R3.S3]", () => {
     log([...doneAll, probing, ev(2, "task.reviewed", { task: "branch", findings: [finding("should-fix")], not_probed: [] }), ev(2, "task.fixing", { task: "branch", round: 1, cause: "should-fix" }),
