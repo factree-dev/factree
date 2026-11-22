@@ -1,6 +1,6 @@
 ---
 name: build
-description: Build an approved Factree plan — run its tasks test-first, in parallel wherever the plan's order allows, each in its own git worktree, merging each into a plan branch and marking it done as it lands. Use when a plan is approved and the user wants it built. Never changes the spec or plan; never pushes.
+description: Build an approved Factree plan — run its tasks test-first, in parallel wherever the plan's order allows, each in its own git worktree, merging each into its repo's integration branch and marking it done as it lands. Use when a plan is approved and the user wants it built. Never changes the spec or plan; never pushes.
 argument-hint: "<work id, e.g. 015-build>"
 ---
 
@@ -30,7 +30,7 @@ Build what the plan says, nothing else. Never edit the spec or the plan's design
 Log `bash <plugin>/scripts/event.sh stage.step <spec-id> '{"stage":"build","work":"<work-id>"}'` as the build starts (live-activity R4); `task.started` then shows each task.
 
 
-Each task's repo comes from `bash <plugin>/scripts/plan-repos.sh <work-dir>` (`T<n>`, tab, repo folder; `.` is the workspace's one repo). Work on the integration branch `factree/<work>` in **each repo the plan touches**: create it from that repo's current commit, or check it out if it exists. Say which, per repo, in one line. It stays local (the review skill pushes task branches). The user's own branches are never changed. A single-repo workspace is the same flow with one repo.
+Each task's repo comes from `bash <plugin>/scripts/plan-repos.sh <work-dir>` (`T<n>`, tab, repo folder; `.` is the workspace's one repo). Work on the integration branch `factree/<work>` in **each repo the plan touches**: create it from that repo's current commit, or check it out if it exists. Say which, per repo, in one line. It stays local: the build never pushes. The user's own branches are never changed. A single-repo workspace is the same flow with one repo.
 
 **Baseline** (building R1, multi-repo R3): run each repo's full test command, from that repo's profile, on its integration branch before any task. If anything fails, stop before the first wave and report each failing test as already failing on `factree/<work>` in that repo; a task must never be blamed for it.
 
@@ -38,7 +38,7 @@ Each task's repo comes from `bash <plugin>/scripts/plan-repos.sh <work-dir>` (`T
 
 ### 3. Run in waves
 
-A task is **ready** when every task it depends on is done. Start every ready task the pre-flight scan allows at once, **at most three at a time**, each as its **own subagent in its own git worktree**, in its own repo, on a branch `factree/<work>-T<n>`. The branch starts from the merge of the task branches of its dependencies in that repo, or from the repo's current commit when none of its dependencies are in that repo (dependencies in other repos give it nothing to start from), so it holds none of the other tasks' changes. With the prompt from `<skill>/task-prompt.md` filled in for that task. Name it `Build <work> T<n>`. In each new worktree, run that repo's install command from its profile (e.g. `npm ci`) before the subagent starts (building R1). Log `task.started` with `{"task":"T<n>"}` for each. A ready task held back, by the scan or by the limit of three, logs `task.waiting` with `{"task","reason"}` naming what it waits for (e.g. "shares src/app.js with T2").
+A task is **ready** when every task it depends on is done. Start every ready task the pre-flight scan allows at once, **at most three at a time**, each as its **own subagent in its own git worktree**, in its own repo, on a branch `factree/<work>-T<n>`. The branch starts from the merge of the task branches of its dependencies in that repo, or from the repo's current commit when none of its dependencies are in that repo (dependencies in other repos give it nothing to start from), so it holds none of the other tasks' changes. Note that start commit when you make the branch; the task's line count and diff are measured from it. With the prompt from `<skill>/task-prompt.md` filled in for that task. Name it `Build <work> T<n>`. In each new worktree, run that repo's install command from its profile (e.g. `npm ci`) before the subagent starts (building R1). Log `task.started` with `{"task":"T<n>"}` for each. A ready task held back, by the scan or by the limit of three, logs `task.waiting` with `{"task","reason"}` naming what it waits for (e.g. "shares src/app.js with T2").
 
 **Name a model for every subagent** (building R6), never leaving it to inherit yours: the cheapest model for a builder whose steps give exact tests and signatures and whose estimated diff is 150 lines or fewer; a standard model for any other builder, and for reviews; a more capable model for the last round of a fix loop.
 
