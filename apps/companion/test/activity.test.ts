@@ -50,10 +50,10 @@ describe("live activity", () => {
     expect(spine).toMatch(/Building<span class="ellipsis"/);
   });
 
-  it("self-reviewing [live-activity#R1.S3]", () => {
+  it("the self-review step reads Probing the branch [live-activity#R1.S3, build-visibility#R4.S2]", () => {
     log([ev(2, "stage.step", { stage: "self-review", work: W })]);
-    expect(activityText(state().activity!)).toBe("Self-reviewing…");
-    expect(views().spine).toMatch(/Self-reviewing<span class="ellipsis"/);
+    expect(activityText(state().activity!)).toBe("Probing the branch…");
+    expect(views().spine).toMatch(/Probing the branch<span class="ellipsis"/);
   });
 
   it("verifying [live-activity#R1.S4]", () => {
