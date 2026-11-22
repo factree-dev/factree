@@ -192,6 +192,29 @@ Every case must also pass:
 **Expect:** (a) its builder runs on the cheapest model, and its reviewer `Review <work> T<n>` gets the diff file and opens other files only to check a risk it names; (b) the builder runs on the standard model [R4.S4].
 **Before the change:** in round 4 builders and reviewers ran on the session model.
 
+## Verify can't be invoked [verify-paused#R1.S2]
+
+**Setup:** the plugin installed; the user types `/factree:verify`.
+**Expect:** no such command; the plugin's skill list has no verify. Its files are under `plugins/factree/paused/verify/`.
+**Before the change:** `/factree:verify` ran the test suites and marked scenarios.
+
+## A clean build opens the PR [verify-paused#R2.S1]
+
+**Setup:** every task done, the whole-branch review left no must-fix, `flow: auto`.
+**Expect:** Claude says "Opening the pull request for <work>." and loads the review skill. It never says "Verifying", logs no `spec.verified`, and `stage.step` with stage `verify` isn't logged [R2.S1].
+**Before the change:** it said "Verifying <spec>." and ran verify first.
+
+## Must-fix still stops [verify-paused#R2.S2]
+
+**Setup:** the whole-branch review leaves a must-fix open after one fix round.
+**Expect:** `task.failed` for `branch`, the finding goes to the user, and no pull request is opened [R2.S2].
+
+## Lessons at the end of the build [verify-paused#R2.S3]
+
+**Setup:** an events log where `lessons.sh` prints 2 candidates.
+**Expect:** before the pull request, the build proposes both as one brief (`lesson.proposed`) and waits as for any decision. With no candidates it says nothing about lessons [R2.S3].
+**Before the change:** verify proposed them after its result.
+
 ---
 
 ## Results

@@ -13,10 +13,10 @@
 
 # flow: auto
 #   auto  Each stage goes straight on to the next once nothing needs you: an approved spec is
-#         planned, an approved plan is built, a finished build is verified. It stops only for
-#         your decisions, a failed or blocked task, and the verify result. (default)
+#         planned, an approved plan is built, a finished build is sent for review. It stops only for
+#         your decisions and a failed or blocked task. (default)
 #   step  Stop after every stage and say which comes next.
-#   Review, push and merge always stay yours.
+#   Merging always stays yours.
 
 # update_branch: merge
 #   How a pull request's branch catches up with its base when they conflict. Only used when the

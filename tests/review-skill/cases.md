@@ -72,6 +72,24 @@ Run each case in a scratch repo with a GitHub remote you can push to, the plugin
 **Setup:** a conflict where the base and the branch change the same limit to different numbers; separately, a resolution after which a test fails.
 **Expect:** nothing pushed in either; the user gets both versions and a recommendation as one decision, or the failure.
 
+## PR without verify [verify-paused#R3.S1]
+
+**Setup:** an implemented plan with no `spec.verified` event.
+**Expect:** the pull request is pushed and opened. Its description has no Verified section and no proved count; it has the single line "Verify is paused while it's redesigned; scenarios aren't marked proved." [R3.S1].
+**Before the change:** with no verify the review stopped; a verify with `spec.verified` was required.
+
+## Old tally not shown [verify-paused#R3.S2]
+
+**Setup:** the spec has an old `spec.verified` event from before the pause.
+**Expect:** the description doesn't quote its counts [R3.S2].
+**Before the change:** the Proved line and the Verified section quoted them.
+
+## Fix runs the full suite [verify-paused#R3.S3]
+
+**Setup:** a code-change comment; separately, a conflict resolved by merge.
+**Expect:** in both, the fix task is built, then the profile's full test suite runs before the push. Nothing runs `/factree:verify`. A failing suite means nothing is pushed and the failure goes to the user [R3.S3].
+**Before the change:** each loop called `/factree:verify` before pushing.
+
 ---
 
 ## Results

@@ -41,7 +41,7 @@ This skill writes only inside the Factree workspace: the plan files, the repo pr
 
 Log each numbered decision in a plan brief as `question.asked` on the spec, with the same fields as the spec skill, including `options`.
 
-**The flow runs on its own** (factory-flow): Factree is a factory. Once nothing needs the user, go straight on to the next stage in the same session, saying one line as it starts ("Building 002-spec-order."). Stop only for a decision brief, an approval the user must give, a failed or blocked task, or the verify result; never to ask whether to start the next stage. Never push, open a pull request or merge. With `flow: step` in the preferences, stop after this stage instead and say which comes next.
+**The flow runs on its own** (factory-flow): Factree is a factory. Once nothing needs the user, go straight on to the next stage in the same session, saying one line as it starts ("Building 002-spec-order."). Stop only for a decision brief, an approval the user must give, or a failed or blocked task; never to ask whether to start the next stage. Never push, open a pull request or merge. With `flow: step` in the preferences, stop after this stage instead and say which comes next.
 
 **Preferences:** read `<workspace>/preferences.md` if it exists (format and keys: `<plugin>/shared/preferences.md`). A line `key: value` not starting with `#` sets a key. A missing file or key means the default. Say once, in a line, if it sets a key you don't know (e.g. `approve_specs`) or a value you don't know, and ignore it.
 
@@ -113,7 +113,7 @@ Prefer the most local precedent: the same module over the same repo, the same re
 
 Start every block with its kind (`sequenceDiagram`, `stateDiagram-v2`, `flowchart`); the validator warns about anything else, because the Factree UI can't draw it.
 
-**What this workspace has learned** (self-improving R6): if `<workspace>/checklists/plan.md` exists, ask its questions as well as the built-in ones; if `<workspace>/defaults.md` exists, its lines are defaults for your calls (still listed, still overrulable). **Lessons approved earlier** (self-improving R8.S3): at the start of a run, look in `<workspace>/events.jsonl` for `lesson.approved` keys whose change isn't yet in its file (no `<!-- lesson <key>` comment there). Apply each first, as verify's step 5 describes, and say so in one line.
+**What this workspace has learned** (self-improving R6): if `<workspace>/checklists/plan.md` exists, ask its questions as well as the built-in ones; if `<workspace>/defaults.md` exists, its lines are defaults for your calls (still listed, still overrulable). **Lessons approved earlier** (self-improving R8.S3): at the start of a run, look in `<workspace>/events.jsonl` for `lesson.approved` keys whose change isn't yet in its file (no `<!-- lesson <key>` comment there). Apply each first, as build's lessons step describes, and say so in one line.
 
 **Map everything:** every in-scope requirement to a component; every in-scope scenario to its failure handling (if it's a failure case) and to a test approach from the lens's **Test mapping**. Sections that don't apply say "Not applicable." so readers know they weren't forgotten. Scale the depth to the change: a small change can be short.
 
