@@ -757,7 +757,6 @@ check "each repo's base branch comes from its profile, else its default [multi-r
 rm "$tmp/ws/.factree/repos.md"; plan; mk 1 a none 100; mk 2 b none 100; mk 3 c none 100
 out=$(bash "$PRP" "$W")
 check "a single-repo plan gets one PR per task and no integration branch [multi-repo#R5.S5]" '[ "$(echo "$out" | wc -l | tr -d " ")" = 3 ] && ! echo "$out" | cut -f3,4 | tr "\t" "\n" | grep -qx "factree/009-demo"'
-check "no pull request uses the integration branch as head or base in any plan [multi-repo#R5.S5]" '! { echo "$out"; bash "$PRP" "$W" | cat; } | cut -f3,4 | tr "\t" "\n" | grep -qx "factree/009-demo"'
 check "pr-plan.sh stays under 300 lines [multi-repo#R5]" '[ $(wc -l < $PRP) -lt 300 ]'
 rm -rf "$tmp"
 
