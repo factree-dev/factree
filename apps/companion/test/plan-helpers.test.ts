@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { parsePlan } from "../server/parse-plan.ts";
 import { parseSpec } from "../server/parse-spec.ts";
+import { Overview } from "../src/components/plan/Overview.tsx";
 import { backing, coverage, notBacked, outsideScope, planResolver, refsOf, tasksByRequirement, unproved } from "../src/plan.ts";
 
 const ex = (p: string) => readFileSync(fileURLToPath(new URL(`../../../tests/fixtures/workspace/${p}`, import.meta.url)), "utf8");
@@ -44,6 +45,12 @@ describe("planResolver", () => {
 });
 
 describe("overview", () => {
+  it("the coverage header says covered, never proved [verify-paused#R4.S1]", () => {
+    const h = renderToStaticMarkup(createElement(Overview, { plan: plan002, spec, specId: "link-report" }));
+    expect(h).toMatch(/\d+\/\d+ in-scope scenarios covered/);
+    expect(h).not.toMatch(/scenarios proved/);
+  });
+
   it("counts tasks per vertical and covers every scenario [plan-view#R2.S1]", () => {
     expect(plan002.verticals.map((v) => [v.name, v.tasks?.length])).toEqual([["backend", 1], ["frontend", 1]]);
     expect(coverage(plan002, spec)).toEqual([

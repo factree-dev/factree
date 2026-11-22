@@ -7,6 +7,8 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { parsePath } from "../src/links.ts";
 import { FlowView } from "../src/components/FlowView.tsx";
+import { SpecLink } from "../src/components/Sidebar.tsx";
+import { LoopLine } from "../src/components/LoopLine.tsx";
 import { ReviewView } from "../src/components/ReviewView.tsx";
 import { parseSpec } from "../server/parse-spec.ts";
 import { searchIndex } from "../server/search.ts";
@@ -75,6 +77,10 @@ describe("verify hidden while paused", () => {
     expect(d).toBeTruthy();
     const html = renderToStaticMarkup(createElement(ReviewView, { detail: d }));
     expect(html).not.toMatch(/verif|failing/i);
+    const row = renderToStaticMarkup(createElement(SpecLink, { s: d.summary, active: false }));
+    const line = renderToStaticMarkup(createElement(LoopLine, { summary: d.summary, spec: d.spec, view: "spec" }));
+    expect(row).not.toMatch(/verif|failing|\bproved/i);
+    expect(line).not.toMatch(/verif|failing|\bproved/i);
   });
 
   it("search has no Verify stage [verify-paused#R4.S2]", () => {
