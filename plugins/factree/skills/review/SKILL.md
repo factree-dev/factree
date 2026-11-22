@@ -1,6 +1,6 @@
 ---
 name: review
-description: Send built Factree work out for human review — push the plan branch, open or update a GitHub pull request that says what was built, follow it in the background, and loop each review comment back through build (or the spec) before pushing. Use after a build (the flow does this on its own) or to pick up review comments. Never merges.
+description: Send built Factree work out for human review — push each task's branch, open or update a GitHub pull request per task that says what was built, follow them in the background, and loop each review comment back through build (or the spec) before pushing. Use after a build (the flow does this on its own) or to pick up review comments. Never merges.
 argument-hint: "<work id, e.g. 012-review>"
 ---
 
@@ -44,7 +44,7 @@ Log `bash <plugin>/scripts/event.sh stage.step <spec-id> '{"stage":"review","ste
 3. Otherwise write the description to a file and run `gh pr create -R <owner/repo> --head <head> --base <base> --title "<spec title>: <tasks>" --body-file <file>`. The `base` is from the list: the repo's base branch, or the head of the pull request it's stacked on.
 4. Log `review.opened` on the work id with `{"pr","url","repo","tasks":["T1"],"base","after"}`. `after` maps each of the line's `after` entries to `repo#number`: a head branch to its pull request in the same repo, `repo#T1+T2` to the numbers of the pull requests holding those tasks.
 
-**If a push or an open fails part way,** undo it (D16): close every pull request this run opened (`gh -R <owner/repo> pr close <n>`), delete the branches it pushed (`git push origin --delete <head>`), and report what failed and what was undone. Never leave a half-opened set, because it breaks the merge order. Branches that were already on the remote before this run stay.
+**If a push or an open fails part way,** undo it (D16): close every pull request this run opened (`gh -R <owner/repo> pr close <n>`), delete the branches it created (`git -C <repo-folder> push origin --delete <head>`, in the repo each was pushed to), and report what failed and what was undone. Never leave a half-opened set, because it breaks the merge order. Note before each push whether the head already existed on the remote; one that did is left alone.
 
 The description (R2), with the plan's list of pull requests (multi-repo R6), short on top with everything else folded (`<plugin>/shared/writing.md`). Write each one after the earlier numbers exist; for the later pull requests, edit an earlier one (`gh pr edit`) so all of them list the whole set:
 

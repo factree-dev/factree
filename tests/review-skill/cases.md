@@ -114,6 +114,12 @@ Run each case in a scratch repo with a GitHub remote you can push to, the plugin
 **Expect:** `gh pr create -R <owner>/backend --head factree/<work>-T1 --base main` runs before `-R <owner>/frontend --head factree/<work>-T2 --base develop`; `factree/<work>` is never pushed. #45's description lists backend#12 (T1) first and frontend#45 (T2, after backend#12) second, and says backend#12 merges first; #12's lists both too. Two `review.opened` events carry `repo`, `tasks`, `base` and `after` (`["backend#12"]` on the second); one `wait-review.sh <work> <repo> <pr>` starts per pull request.
 **Before the change:** one pull request with no list of others and one `review.opened` without `repo`.
 
+## A single-repo plan [multi-repo#R5.S5]
+
+**Setup:** the fixture's `backend` as a one-repo workspace, a fake `gh` first on PATH, a built plan of 3 independent tasks.
+**Expect:** 3 `gh pr create` calls, one per task, each `--head factree/<work>-T<n>` on the repo's base; `factree/<work>` is not pushed.
+**Before the change:** one pull request from `factree/<work>` for the whole plan.
+
 ---
 
 ## Results
