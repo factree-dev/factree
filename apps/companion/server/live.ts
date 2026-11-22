@@ -93,28 +93,51 @@ export function displayStatus(fileStatus: SpecStatus | null, live: Live, lastMov
 
 const WRITING_STEP: Record<string, string> = { gaps: "finding gaps", observe: "reading the code", questions: "asking questions", writing: "", checking: "checking", approval: "finishing" };
 const STAGE_LABEL: Record<string, [Activity["stage"], string]> = {
-  plan: ["plan", "Planning"], build: ["build", "Building"], "self-review": ["build", "Self-reviewing"], verify: ["verify", "Verifying"], review: ["review", "Opening the pull request"],
+  plan: ["plan", "Planning"], build: ["build", "Building"], "self-review": ["build", "Probing the branch"], verify: ["verify", "Verifying"], review: ["review", "Opening the pull request"],
 };
-const ENDS = new Set(["spec.approved", "plan.approved", "plan.implemented", "task.failed", "task.blocked", "spec.verified", "review.opened"]);
+const ENDS = new Set(["spec.approved", "plan.approved", "task.failed", "task.blocked", "spec.verified", "review.opened", "branch.reviewed"]);
 
 /** What's running on a spec now: the newest progress event that nothing has ended since (live-activity R1–R3). */
 export function activityOf(id: string, events: FactreeEvent[], plans: Plan[], now: number): Activity | null {
   const works = new Set(plans.map((p) => p.work));
   let cur: Activity | null = null;
   let before: Activity | null = null;   // what was running when a question was asked
+  const builders = new Set<string>(), reviewers = new Set<string>();   // tasks with an agent running (build-visibility R4)
+  let probing = false;   // the branch reviewer was recorded and no branch.reviewed followed
+  const idle = () => { cur = null; before = null; builders.clear(); reviewers.clear(); probing = false; };
   for (const e of events) {
     if (e.spec !== id && !(e.work && works.has(e.work))) continue;
-    if (ENDS.has(e.type)) { cur = null; before = null; continue; }
+    // A built plan with no branch review in progress is finished; one still probing carries on until branch.reviewed (D7).
+    if (ENDS.has(e.type) || (e.type === "plan.implemented" && !probing)) { idle(); continue; }
+    if (e.type === "plan.implemented") continue;
+    if (e.type === "agent.started") {
+      const task = String(e.data.task ?? ""), role = String(e.data.role ?? "");
+      if (role === "review" && task === "branch") probing = true;
+      else if (role === "review") { builders.delete(task); reviewers.add(task); }
+      else if (role === "build") { reviewers.delete(task); builders.add(task); }
+      else continue;
+      if (!cur?.asking) cur = { stage: "build", label: "Building", step: "", since: e.ts, paused: false, asking: false };
+      continue;
+    }
     if (e.type === "spec.step") cur = { stage: "spec", label: "Writing", step: WRITING_STEP[String(e.data.step)] ?? "", since: e.ts, paused: false, asking: false };
     else if (e.type === "stage.step") {
       const [stage, label] = !VERIFY_ON && e.data.stage === "verify" ? [] : STAGE_LABEL[String(e.data.stage)] ?? [];   // paused: an old verify step shows nothing
+      if (e.data.stage === "self-review") probing = true;   // the branch review starts with the self-review step (D7)
       if (stage && label) cur = { stage, label, step: e.data.stage === "review" ? "" : String(e.data.step ?? ""), since: e.ts, paused: false, asking: false };
     } else if (e.type === "task.started" || e.type === "task.done") {
-      if (!cur || cur.label !== "Self-reviewing") cur = { stage: "build", label: "Building", step: "", since: e.ts, paused: false, asking: false };
+      const t = String(e.data.task ?? "");
+      if (e.type === "task.done") { builders.delete(t); reviewers.delete(t); }
+      if (!cur || !probing) cur = { stage: "build", label: "Building", step: "", since: e.ts, paused: false, asking: false };
     } else if (e.type === "question.asked" && cur) { before = cur.asking ? before : cur; cur = { ...(cur as Activity), label: "Asking you", step: "", since: e.ts, asking: true }; }
     else if (e.type === "question.answered" && cur?.asking && before) { cur = { ...(before as Activity), since: e.ts }; before = null; }
   }
   if (!cur) return null;
+  const list = (x: Set<string>) => [...x].sort().join(", ");
+  if (!cur.asking && cur.stage === "build") {
+    if (probing) { cur.label = "Probing the branch"; cur.step = ""; }
+    else if (builders.size) { cur.label = "Building"; cur.step = list(builders) + (reviewers.size ? ` · Reviewing ${list(reviewers)}` : ""); }
+    else if (reviewers.size) { cur.label = "Reviewing"; cur.step = list(reviewers); }
+  }
   if (cur.label === "Building" && !cur.step) {
     const p = plans[0];
     const running = p ? Object.entries(p.build).find(([, b]) => b.status === "running")?.[0] : undefined;

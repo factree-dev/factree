@@ -42,13 +42,19 @@ export function planStage(s: SpecSummary, spec: Spec | null): { sub: string; hre
   return { sub: "Approve the spec first", href: null, done: false };
 }
 
-/** The Build stage (build R8): selectable once the newest plan is approved; shows how far its build got. */
+/** The Build stage (build R8, build-visibility R1): selectable once the newest plan is approved; done only when it is
+ *  implemented and its branch review ended with no must-fix open (or logged no branch events at all, as older plans). */
 export function buildStage(s: SpecSummary): { sub: string; href: string | null; done: boolean } {
   const p = s.plan;
   if (!p || p.status !== "approved") return { sub: "Approve a plan first", href: null, done: false };
   const href = planHref(s.id, p.work, "build");
-  if (p.implemented) return { sub: "Implemented", href, done: true };
-  if (p.done > 0) return { sub: `${p.done}/${p.tasks} tasks done`, href, done: false };
+  const br = p.branchReview;
+  if (br?.phase === "ended" && br.must > 0) return { sub: `branch review: ${br.must} must-fix open`, href, done: false };
+  if (p.implemented && (!br || br.phase === "ended")) return { sub: "Implemented", href, done: true };
+  const merged = `${p.done}/${p.tasks} merged`;
+  if (br?.phase === "fixing") return { sub: `branch review: ${br.findings.filter((f) => /^should/i.test(f.severity)).length} should-fix, fixing`, href, done: false };
+  if (br) return { sub: `${merged} · branch review: probing`, href, done: false };
+  if (p.done > 0) return { sub: merged, href, done: false };
   return { sub: "Not started", href, done: false };
 }
 
