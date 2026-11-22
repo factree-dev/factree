@@ -62,7 +62,7 @@ describe("going back round", () => {
     expect(sm.loop!.round).toBe(2);
     const r = progressOf(sm, spec);
     expect(r.stages[2]!.fill).toBe(0.75);
-    expect(r.stages[2]!.sub).toBe("3/4 tasks done");
+    expect(r.stages[2]!.sub).toBe("3/4 merged");
   });
 
   it("edits in one change are one round", () => {

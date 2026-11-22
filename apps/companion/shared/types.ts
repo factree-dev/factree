@@ -198,13 +198,14 @@ export interface Plan {
   verticals: PlanVertical[];
   stale: boolean;                // the spec changed after this plan was made (set by the workspace reader)
   sessions: SessionRef[];        // sessions that logged this plan's events, newest first (spec-sessions R3)
+  branchReview?: BranchReview | null;   // from agent.started/task.reviewed/task.fixing/branch.reviewed for the branch; null with none
   build: Record<string, TaskBuild>;   // each task's build status, from task.* events (build R8)
   implementedAt: string;         // set by task-done.sh when every task is done (build R6)
   problems: string[];
 }
 
 // What the spec list and the Plan stage need: the newest plan, and how many others there are.
-export interface PlanBrief { work: string; status: PlanStatus; approvedAt: string; others: number; tasks: number; done: number; implemented: boolean; review?: ReviewInfo | null }
+export interface PlanBrief { work: string; status: PlanStatus; approvedAt: string; others: number; tasks: number; done: number; implemented: boolean; review?: ReviewInfo | null; branchReview?: BranchReview | null }
 // The newest pull request for a plan, from review.* events (review R8). state: OPEN, CHANGES_REQUESTED, APPROVED, MERGED or CLOSED.
 export interface ReviewInfo { url: string; state: string; comments: { author: string; path: string; line: string; body: string; handled: string | null }[] }
 
@@ -216,7 +217,20 @@ export interface SessionRef { id: string; last: string; state: "working" | "your
 export interface ClaudeCall { id: string; text: string; by: string; ts: string; from: string }
 
 export type TaskBuildStatus = "waiting" | "running" | "done" | "failed" | "blocked";
-export interface TaskBuild { status: TaskBuildStatus; commit?: string; lines?: number; reason?: string }
+export type TaskPhase = "waiting" | "building" | "reviewing" | "fixing" | "merged";
+// phase..reviewerRecorded come from agent.started, task.waiting, task.reviewed and task.fixing (build-visibility R2); findings are the not-beyond-sources ones, suggestions the beyond-sources ones.
+export interface TaskBuild {
+  status: TaskBuildStatus; commit?: string; lines?: number; reason?: string;
+  phase?: TaskPhase; model?: string; round?: number; cause?: string; verdict?: string; findings?: number; suggestions?: number; reviewerRecorded?: boolean;
+}
+// The whole-branch review of the plan's latest run (build-visibility R3): probing until branch.reviewed ends it.
+export interface BranchReview {
+  phase: "probing" | "fixing" | "ended";
+  findings: { severity: string; text: string; evidence: string }[];
+  notProbed: { area: string; reason: string }[];
+  rounds: { round: number; cause: string }[];
+  verdict: string; must: number; should: number;
+}
 
 export interface VerifyCounts { proved: number; failing: number; unverified: number; manual?: number; at: string }   // manual: unverified because only a person can check them (stage-spine R4)
 export type ScenarioStatus = "proved" | "failing" | "unverified";

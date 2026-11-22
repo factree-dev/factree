@@ -38,7 +38,7 @@ describe("the spec row says where the spec is", () => {
     expect(line(s)).not.toContain("Build ·");
   });
   it("a plan not built yet [spec-row#R1.S6]", () => {
-    expect(line(summary({ plan: plan({ done: 1 }) }))).toBe("Build · 1/3 tasks done");
+    expect(line(summary({ plan: plan({ done: 1 }) }))).toBe("Build · 1/3 merged");
   });
   it("a draft spec", () => {
     expect(line(summary({ status: "draft" }))).toBe("Spec · Draft");

@@ -1,7 +1,7 @@
 // Plans and the loop's state for a spec: its plans and their build, newest plan, verify result, pull request, stale stages
 // and round (specs plan-view, build, verify, review, spec-ring R4).
 
-import type { FactreeEvent, Plan, PlanBrief, Session, Spec, TaskBuild, VerifyCounts, VerifyResult, ReviewInfo, LoopState } from "../shared/types.ts";
+import type { FactreeEvent, Plan, PlanBrief, Session, Spec, TaskBuild, VerifyCounts, VerifyResult, ReviewInfo, LoopState, BranchReview } from "../shared/types.ts";
 import { readdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { parsePlan, type PlanFiles } from "./parse-plan.ts";
@@ -43,7 +43,7 @@ export function brief(plans: Plan[], events: FactreeEvent[] = []): PlanBrief | n
   const builds = Object.values(p.build);
   return { work: p.work, status: p.status, approvedAt: p.approvedAt, others: plans.length - 1,
     tasks: builds.length, done: builds.filter((b) => b.status === "done").length, implemented: Boolean(p.implementedAt),
-    review: reviewOf(p.work, events) };
+    review: reviewOf(p.work, events), ...(p.branchReview ? { branchReview: p.branchReview } : {}) };
 }
 
 /** The plan's newest pull request: state and comments with how each was handled (review R8). */
@@ -107,14 +107,53 @@ export function buildStatus(plan: Plan, events: FactreeEvent[]): Record<string, 
   const out: Record<string, TaskBuild> = {};
   for (const v of plan.verticals) for (const t of v.tasks ?? []) out[t.id] = { status: "waiting" };
   for (const e of events) {
-    if (e.work !== plan.work || !e.type.startsWith("task.")) continue;
+    if (e.work !== plan.work || !(e.type.startsWith("task.") || e.type === "agent.started")) continue;
     const id = String(e.data.task ?? "");
     if (!(id in out)) continue;
-    if (e.type === "task.started") out[id] = { status: "running" };
-    else if (e.type === "task.done") out[id] = { status: "done", commit: String(e.data.commit ?? ""), lines: Number(e.data.lines ?? 0) };
+    const b = out[id]!, role = e.data.role;
+    if (e.type === "agent.started") {
+      if (role === "build") out[id] = { ...b, phase: "building", model: String(e.data.model ?? ""), reviewerRecorded: false };
+      else if (role === "review") out[id] = { ...b, phase: "reviewing", reviewerRecorded: true };
+    }
+    else if (e.type === "task.waiting") out[id] = { ...b, phase: "waiting", reason: String(e.data.reason ?? "") };
+    else if (e.type === "task.fixing") out[id] = { ...b, phase: "fixing", round: Number(e.data.round ?? 0), cause: String(e.data.cause ?? ""), reviewerRecorded: false };
+    else if (e.type === "task.reviewed") {
+      const fs = Array.isArray(e.data.findings) ? (e.data.findings as { beyond_sources?: boolean }[]) : [];
+      if (e.data.round !== undefined) out[id] = { ...b, round: Number(e.data.round), cause: String(e.data.cause ?? "") };   // after a fix round: the re-review's mark
+      else out[id] = { ...b, verdict: `${String(e.data.spec ?? "")}/${String(e.data.quality ?? "")}`, findings: fs.filter((f) => !f.beyond_sources).length, suggestions: fs.filter((f) => f.beyond_sources).length };
+    }
+    else if (e.type === "task.started") out[id] = { ...b, status: "running", phase: "building" };
+    else if (e.type === "task.done") out[id] = { ...b, status: "done", phase: "merged", commit: String(e.data.commit ?? ""), lines: Number(e.data.lines ?? 0) };
     else if (e.type === "task.failed" || e.type === "task.blocked") out[id] = { status: e.type === "task.failed" ? "failed" : "blocked", reason: String(e.data.reason ?? "") };
   }
   return out;
+}
+
+/** The branch review of the plan's latest run: a new branch reviewer starts a fresh run, so its findings replace the last's (build-visibility R3). */
+export function branchReviewOf(work: string, events: FactreeEvent[]): BranchReview | null {
+  let br: BranchReview | null = null;
+  for (const e of events) {
+    if (e.work !== work) continue;
+    const d = e.data, branch = d.task === "branch";
+    if (e.type === "agent.started" && d.role === "review" && branch) br = { phase: "probing", findings: [], notProbed: [], rounds: [], verdict: "", must: 0, should: 0 };
+    else if (e.type === "task.reviewed" && branch) {
+      br ??= { phase: "probing", findings: [], notProbed: [], rounds: [], verdict: "", must: 0, should: 0 };
+      br.phase = "probing";
+      if (d.round !== undefined) { if (!br.rounds.some((r) => r.round === Number(d.round))) br.rounds.push({ round: Number(d.round), cause: String(d.cause ?? "") }); }
+      else {
+        br.findings = (Array.isArray(d.findings) ? d.findings as Record<string, unknown>[] : []).map((f) => ({ severity: String(f.severity ?? ""), text: String(f.text ?? ""), evidence: String(f.evidence ?? "") }));
+        br.notProbed = (Array.isArray(d.not_probed) ? d.not_probed as Record<string, unknown>[] : []).map((n) => ({ area: String(n.area ?? ""), reason: String(n.reason ?? "") }));
+      }
+    } else if (e.type === "task.fixing" && branch) {
+      br ??= { phase: "fixing", findings: [], notProbed: [], rounds: [], verdict: "", must: 0, should: 0 };
+      br.phase = "fixing";
+      br.rounds = [...br.rounds.filter((r) => r.round !== Number(d.round)), { round: Number(d.round ?? 0), cause: String(d.cause ?? "") }];
+    } else if (e.type === "branch.reviewed") {
+      br ??= { phase: "ended", findings: [], notProbed: [], rounds: [], verdict: "", must: 0, should: 0 };
+      br = { ...br, phase: "ended", verdict: String(d.verdict ?? ""), must: Number(d.must ?? 0), should: Number(d.should ?? 0) };
+    }
+  }
+  return br;
 }
 
 /** Every plan in `work/`, newest (highest number) first. A folder with no plan, design or task file isn't a plan (plan-view R11.S3). */
@@ -141,6 +180,7 @@ export function readPlans(root: string, events: FactreeEvent[] = [], specs: Map<
     p.stale = isStale(p, events, specs.get(p.spec));
     p.sessions = sessionsFor(events, (e) => e.work === work, live);
     p.build = buildStatus(p, events);
+    p.branchReview = branchReviewOf(work, events);
     out.push(p);
   }
   return out;
