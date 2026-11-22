@@ -91,7 +91,7 @@ Show every link.
 ### 4. Follow the review (review R3)
 
 Start one `bash <plugin>/scripts/wait-review.sh <work> <repo> <pr>` per pull request with `run_in_background`, then end your turn. Each checks its pull request, in its repo, every 5 minutes, logs each new comment (`review.comment`) and each change of state (`review.state`), and exits when there's something new, which wakes this session. Keep one wait per pull request. When one ends:
-- **Merged or closed:** say so. Don't start another wait for it; Review is done when every pull request is.
+- **Merged or closed:** say so. Don't start another wait for it. If an open pull request is stacked on it, go to step 8. Review is done when every pull request is.
 - **Approved:** say it's ready for the reviewers or the user to merge. Never merge it yourself.
 - **Comments:** go on to step 5.
 - **CONFLICTING:** the pull request no longer merges cleanly with its base, usually because something else merged first. Go to step 7.
@@ -108,9 +108,15 @@ Say how you sorted each, in one line apiece.
 
 ### 6. Loop it back
 
-- **Code change** (R5): add a fix task to the plan's tasks for the vertical whose code it touches, numbered after the last task, with `**Proves:**` the scenarios it affects (or `none (review comment <id>)`), and run `/factree:build <work>` for it: test-first, reviewed, merged. Then run the project's full test suite (the profile's command). Push only if it passes; then reply on the comment with the commit (`gh api repos/{owner}/{repo}/pulls/<n>/comments/<id>/replies -f body="Fixed in <sha>: <one line>"`, or `gh pr comment` for a conversation comment) and log `review.reply` with `{"pr","comment":"<id>","kind":"fixed","commit":"<sha>"}`. If the suite fails, push nothing and bring the failure to the user (R5.S2).
-- **Behaviour change** (R6): run `/factree:spec` with the comment as the requirement and the pull request as its source. The flow plans and builds the change; then push and reply as above with `"kind":"spec"`.
-- **Doesn't hold** (R7): draft a short reply with your reasoning and the line that shows it. Ask it as a decision: log `question.asked` on the spec with `{"n","text":"Reply to <author> on <path>:<line>?","why":"<your reasoning>","proposal":"Post: <the reply>","options":["Change the code instead — treat it as a code change"]}`, and wait as for any decision. Post it only on the user's yes, then log `review.reply` with `"kind":"disagree"`.
+- **Code change** (R5, multi-repo R8, D11): the fix is a commit on the task branch of the pull request the comment is on, in that pull request's repo. Route it by repo and number, never by number alone: the same number can exist in two repos (R8.S3). Take the `repo` and task from the `review.opened` for that pull request, then:
+  1. Make a worktree of `<head>` in that repo. Write the failing test first, then the fix, as one commit.
+  2. A fresh reviewer, named `Review <work> T<n>`, checks that task's diff (the build skill's task review). Fix what it finds.
+  3. Run that repo's full suite (the profile's command). If it fails, push nothing and bring the failure to the user (R5.S2).
+  4. Merge the fix into the integration branch `factree/<work>` too (local only, never pushed), so it carries the fix.
+  5. Push the task branch: `git -C <repo> push origin <head>`. Then restack any pull request stacked on it (step 8).
+  6. Reply on the comment with the commit (`gh api repos/<owner/repo>/pulls/<n>/comments/<id>/replies -f body="Fixed in <sha>: <one line>"`, or `gh pr comment -R <owner/repo>` for a conversation comment) and log `review.reply` with `{"pr","repo","comment":"<id>","kind":"fixed","commit":"<sha>"}`.
+- **Behaviour change** (R6): run `/factree:spec` with the comment as the requirement and the pull request as its source. The flow plans and builds the change; then push each task branch the change touches, restack, and reply as above with `"kind":"spec"`.
+- **Doesn't hold** (R7): draft a short reply with your reasoning and the line that shows it. Ask it as a decision: log `question.asked` on the spec with `{"n","text":"Reply to <author> on <path>:<line>?","why":"<your reasoning>","proposal":"Post: <the reply>","options":["Change the code instead — treat it as a code change"]}`, and wait as for any decision. Post it only on the user's yes, then log `review.reply` with `"repo"` and `"kind":"disagree"`.
 
 Then start the wait again (step 4).
 
@@ -124,18 +130,30 @@ Repos differ in how a branch catches up with its base, so find this repo's way b
 5. **Otherwise ask once,** as a decision with a recommendation (merge, which keeps reviewers' comments attached and needs no force-push), and save the answer as `update_branch` so it isn't asked again (R10.S4).
 
 Then:
-- **Update the branch** from the base: `git merge origin/<base>`, or for rebase `git rebase origin/<base>` and later `git push --force-with-lease`. Never force-push otherwise, and never without lease (R10.S3).
+- **Update the branch** from the base: `git merge origin/<base>`, or for rebase `git rebase origin/<base>` and later `git push --force-with-lease=<head>:<sha Factree last pushed>`. Update only the pull request's own task branch, never `factree/<work>`. Never force-push otherwise, and never without lease (R10.S3).
 - **Resolve each conflict.** Follow any rule the repo's docs give. Where both sides add separate things, keep both. Where the base and the branch change the same behaviour differently (the same rule, value or text to different ends), or you aren't sure what either side meant, stop: push nothing, and bring the user both versions and your recommendation as one decision (R10.S6).
 - **Prove it** before pushing: run the build and the project's full test suite from the repo profile. If anything fails, push nothing and bring the failure to the user (R10.S6).
-- **Push, then say so on the pull request** in one comment: what conflicted and how it was resolved, and the checks that passed (R10.S5).
+- **Push the task branch, then say so on the pull request** in one comment: what conflicted and how it was resolved, and the checks that passed (R10.S5).
 
 Then start the wait again (step 4). It logs the pull request as mergeable once GitHub agrees.
 
-**Evidence with every claim** (verifying R3): say work is pushed or fixed only right after running the command that shows it, and quote it ("git push: factree/012-review -> factree/012-review", "npm test: 221 passed").
+### 8. Restack after a merge or a fix (multi-repo R7, R8.S2, D5)
+
+A pull request stacked on another carries the other's commits. A squash merge rewrites them, so the stack must be cleaned. Do this when a pull request merges (step 4) or when a fix lands on a task branch (step 6), for each open pull request stacked on it, nearest first, in the same repo only. Only `factree/` branches Factree created are rebased or pushed, never `factree/<work>`.
+
+1. `git -C <repo> fetch origin`. Note `<old base tip>`: the sha of the branch it was stacked on before the merge or fix (the `after` branch's tip as Factree last pushed it).
+2. In a worktree of `<head>`: `git rebase --onto origin/<base> <old base tip> <head>`. `<base>` is the repo's base branch after a merge, or the fixed branch if it's still open. The merged commits drop out.
+3. A conflict: resolve it as in step 7, or stop and ask.
+4. Run that repo's full suite. If it fails, push nothing and bring the failure to the user.
+5. Push with `git -C <repo> push --force-with-lease=<head>:<sha Factree last pushed> origin <head>`. If it's refused, someone else pushed to that branch (R7.S2): stop, overwrite nothing, tell the user what's on the remote, and ask what to do.
+6. After a merge, retarget it: `gh pr edit <n> -R <owner/repo> --base <base>`. Its diff then shows only its own change (R7.S1).
+7. Log `review.restacked` on the work id with `{"pr","repo","task","base"}`, then restack the pull requests stacked on this one the same way.
+
+**Evidence with every claim** (verifying R3): say work is pushed or fixed only right after running the command that shows it, and quote it ("git push: factree/012-review-T2 -> factree/012-review-T2", "npm test: 221 passed").
 
 ## Logging events
 
-`bash <plugin>/scripts/event.sh <type> <work> '<json>'`: `review.opened` `{"pr","url","repo","tasks","base","after"}`, `review.reply` `{"pr","comment","kind","commit"}`. `review.comment` and `review.state` come from `wait-review.sh`, never by hand.
+`bash <plugin>/scripts/event.sh <type> <work> '<json>'`: `review.opened` `{"pr","url","repo","tasks","base","after"}`, `review.reply` `{"pr","repo","comment","kind","commit"}`, `review.restacked` `{"pr","repo","task","base"}`. `review.comment` and `review.state` come from `wait-review.sh`, never by hand.
 
 Run `bash <plugin>/scripts/link.sh <spec-id> <work>` when the pull request opens and end your message with its line, if any.
 
@@ -143,9 +161,10 @@ Run `bash <plugin>/scripts/link.sh <spec-id> <work>` when the pull request opens
 
 | Thought | Reality |
 |---|---|
-| "The reviewer's right, I'll just change it" | Check it against the code first. Then a fix task, built and tested, before anything is pushed. |
+| "The reviewer's right, I'll just change it" | Check it against the code first. Then a test-first fix on the task branch, reviewed and tested, before anything is pushed. |
 | "It's a one-line fix, I'll push it straight away" | Every push runs the full test suite first. A reviewer must never see code Factree hasn't built and tested. |
 | "The reviewer wants new behaviour, I'll add it to the fix" | Behaviour changes go through the spec. Run /factree:spec. |
 | "They're wrong, I'll reply and move on" | A reply that disagrees speaks for the user. Ask first. |
+| "I'll force-push the rebase" | Only with `--force-with-lease=<head>:<sha Factree last pushed>`, and only a `factree/` task branch. A refusal means someone else pushed: ask. |
 | "It's approved, I'll merge it" | Never. Merging is the reviewers' and the user's. |
 | "gh isn't there, I'll push with git and open it later" | No gh, no push. Say how to install it and stop. |
