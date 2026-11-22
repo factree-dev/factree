@@ -37,7 +37,9 @@ awk -v T="### $task:" '
   { print }' "$file" > "$tmp" && mv "$tmp" "$file"
 
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
-bash "$here/event.sh" task.done "$work" "{\"task\":\"$task\",\"commit\":\"$(json_escape "$commit")\",\"lines\":$lines,\"tests\":\"$(json_escape "$tests")\"}" || exit 1
+# The repo the task works in (plan-repos.sh: "." for a single-repo workspace) [multi-repo#R3.S4].
+repo=$(bash "$here/plan-repos.sh" "$dir" 2>/dev/null | awk -F'\t' -v t="$task" '$1 == t { print $2 }')
+bash "$here/event.sh" task.done "$work" "{\"task\":\"$task\",\"commit\":\"$(json_escape "$commit")\",\"lines\":$lines,\"tests\":\"$(json_escape "$tests")\",\"repo\":\"$(json_escape "${repo:-.}")\"}" || exit 1
 echo "$task done"
 
 # Implemented when every task in the plan has a task.done event.

@@ -506,6 +506,19 @@ check "a branch reviewer doesn't satisfy a task's gate [build-visibility#R5.S1]"
 rtmp; rv "$tmp" T2 pass; out=$(tdr)
 check "a review event without a reviewer subagent exits 3 [parallel-build#R5.S6]" 'echo "$out" | grep -q "^T2 has no reviewer subagent$" && echo "$out" | grep -q "rc=3" && t2open && ! grep -q task.done "$tmp/.factree/events.jsonl"'
 rm -rf "$tmp"
+# task.done records the task's repo [multi-repo#R3.S4]
+tmp=$(mktemp -d); tmp=$(cd "$tmp" && pwd -P); bash tests/fixtures/multi/make.sh "$tmp/ws"; mkdir -p "$tmp/ws/.factree/work"
+cp -R tests/validate-plan/verticals/plan "$tmp/ws/.factree/work/007-widget-export"; printf 'frontend\nbackend\ninfra\n' > "$tmp/ws/.factree/repos.md"
+M="$tmp/ws/.factree/work/007-widget-export"
+sed -i.bak 's#`src/x.ts`#`backend/src/x.ts`#' "$M/backend/tasks.md"; sed -i.bak 's#`src/x.ts`#`frontend/src/x.ts`#' "$M/frontend/tasks.md"; rm -f "$M"/*/*.bak
+FACTREE_HOME="$tmp/ws/.factree" bash $EVENT agent.started 007-widget-export '{"role":"review","task":"T2","model":"sonnet"}'
+FACTREE_HOME="$tmp/ws/.factree" bash $EVENT task.reviewed 007-widget-export '{"task":"T2","spec":"pass","quality":"pass"}'
+FACTREE_HOME="$tmp/ws/.factree" bash "$TD" 007-widget-export T2 abc1234 60 "npm test" >/dev/null
+check "task.done records the task's repo [multi-repo#R3.S4]" 'grep "\"type\":\"task.done\",\"work\":\"007-widget-export\"" "$tmp/ws/.factree/events.jsonl" | grep -q "\"task\":\"T2\",\"commit\":\"abc1234\",\"lines\":60,\"tests\":\"npm test\",\"repo\":\"frontend\""'
+rm -rf "$tmp"
+rtmp; rv "$tmp" T2 pass; rvs "$tmp" T2; FACTREE_HOME="$tmp/.factree" bash "$TD" 007-widget-export T2 abc1234 60 "npm test" >/dev/null
+check "a single-repo task records repo \".\" [multi-repo#R3.S4]" 'grep "\"type\":\"task.done\"" "$tmp/.factree/events.jsonl" | grep -q "\"tests\":\"npm test\",\"repo\":\"\\.\""'
+rm -rf "$tmp"
 
 echo "# agent hook"
 tmp=$(mktemp -d); FACTREE_HOME="$tmp/.factree" bash $EVENT task.waiting 059-x '{"task":"T2","reason":"shares lines with T3"}' 2>/dev/null
