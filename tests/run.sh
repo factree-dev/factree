@@ -739,8 +739,11 @@ check "two dependencies stack on the highest and name the other [multi-repo#R5.S
 plan; mk 5 infra none 40; mk 6 infra "T5" 60
 out=$(bash "$PRP" "$W")
 check "a small chain shares one PR within review_budget [multi-repo#R5.S4]" '[ "$out" = "$(printf "T5,T6\tinfra\tfactree/009-demo-T6\tmain\t-")" ]'
-plan 90; out=$(bash "$PRP" "$W" 2>/dev/null); mk 5 infra none 40; mk 6 infra "T5" 60; out=$(bash "$PRP" "$W")
+plan 90; mk 5 infra none 40; mk 6 infra "T5" 60; out=$(bash "$PRP" "$W")
 check "a chain over review_budget is split [multi-repo#R5.S4]" '[ "$(echo "$out" | wc -l | tr -d " ")" = 2 ]'
+plan; mk 1 backend none 40; mk 2 backend T1 40; mk 3 backend T2 40; mk 4 backend T2 40
+out=$(bash "$PRP" "$W")
+check "a middle task with another dependent ends its PR [multi-repo#R5.S4]" '[ "$out" = "$(printf "T1,T2\tbackend\tfactree/009-demo-T2\tmain\t-\nT3\tbackend\tfactree/009-demo-T3\tfactree/009-demo-T2\t-\nT4\tbackend\tfactree/009-demo-T4\tfactree/009-demo-T2\t-")" ]'
 plan; mk 7 backend none 40; mk 8 backend "T7" 40; mk 9 backend "T7" 40
 out=$(bash "$PRP" "$W")
 check "a task others depend on does not share a PR [multi-repo#R5.S4]" '[ "$(echo "$out" | wc -l | tr -d " ")" = 3 ]'
@@ -753,7 +756,8 @@ out=$(bash "$PRP" "$W")
 check "each repo's base branch comes from its profile, else its default [multi-repo#R5.S6]" 'echo "$out" | grep -q "^T1	backend	[^	]*	trunk" && echo "$out" | grep -q "^T2	infra	[^	]*	main" && echo "$out" | grep -q "	frontend	[^	]*	develop"'
 rm "$tmp/ws/.factree/repos.md"; plan; mk 1 a none 100; mk 2 b none 100; mk 3 c none 100
 out=$(bash "$PRP" "$W")
-check "a single-repo plan gets one PR per task and no integration branch [multi-repo#R5.S5]" '[ "$(echo "$out" | wc -l | tr -d " ")" = 3 ] && ! echo "$out" | grep -q "integration"'
+check "a single-repo plan gets one PR per task and no integration branch [multi-repo#R5.S5]" '[ "$(echo "$out" | wc -l | tr -d " ")" = 3 ] && ! echo "$out" | cut -f3,4 | tr "\t" "\n" | grep -qx "factree/009-demo"'
+check "no pull request uses the integration branch as head or base in any plan [multi-repo#R5.S5]" '! { echo "$out"; bash "$PRP" "$W" | cat; } | cut -f3,4 | tr "\t" "\n" | grep -qx "factree/009-demo"'
 check "pr-plan.sh stays under 300 lines [multi-repo#R5]" '[ $(wc -l < $PRP) -lt 300 ]'
 rm -rf "$tmp"
 
