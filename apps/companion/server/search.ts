@@ -2,6 +2,7 @@
 
 import { readSpecs, readEvents } from "./read.ts";
 import { readPlans } from "./loop.ts";
+import { VERIFY_ON } from "../src/features.ts";
 import { refHref, planHref, specPath, verifyHref } from "../src/links.ts";
 
 export interface SearchItem { kind: string; id: string; title: string; text: string; context: string; href: string }
@@ -18,7 +19,7 @@ export function searchIndex(root: string): SearchItem[] {
       out.push({ kind: "Stage", id, title: `Plan · ${id}`, text: "", context: id, href: planHref(id, newest.work) });
       out.push({ kind: "Stage", id, title: `Build · ${id}`, text: "", context: id, href: planHref(id, newest.work, "build") });
     }
-    out.push({ kind: "Stage", id, title: `Verify · ${id}`, text: "", context: id, href: verifyHref(id) });
+    if (VERIFY_ON) out.push({ kind: "Stage", id, title: `Verify · ${id}`, text: "", context: id, href: verifyHref(id) });
     for (const r of s.requirements) {
       out.push({ kind: "Requirement", id: r.id, title: r.name, text: r.statement, context: id, href: refHref(id, r.id) });
       for (const sc of r.scenarios) {
