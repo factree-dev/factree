@@ -8,6 +8,7 @@ import { parsePlan, type PlanFiles } from "./parse-plan.ts";
 import { parseFrontMatter } from "./parse-spec.ts";
 import { readText, isDir } from "./read.ts";
 import { sessionsFor } from "./live.ts";
+import { VERIFY_ON } from "../src/features.ts";
 
 /** The latest spec.verified event for a spec, as counts or with every scenario's result (verify R4). */
 export function latestVerify(id: string, events: FactreeEvent[], withResults: true): VerifyResult | null;
@@ -72,7 +73,7 @@ function reviewOf(work: string, events: FactreeEvent[]): ReviewInfo | null {
 /** Stale stages and the round (spec-ring R4). A stage after Spec is stale when it last finished before the latest spec
  *  change and hasn't finished since. A spec change starts a new round only once the work went out for review since
  *  the round began; each request for changes is a round too. */
-export function loopOf(id: string, works: Set<string>, events: FactreeEvent[]): LoopState {
+export function loopOf(id: string, works: Set<string>, events: FactreeEvent[], verifyOn: boolean = VERIFY_ON): LoopState {
   const finished: Record<string, string> = {};
   let round = 1, reviewed = false, updated: string | null = null;
   for (const e of events) {
@@ -94,10 +95,10 @@ export function loopOf(id: string, works: Set<string>, events: FactreeEvent[]): 
   // The plan stays fresh if the build finished after the change: building took the change in (R4.S8). A verify alone
   // doesn't: it checks old code against the new spec (R4.S5).
   const builtAfter = Boolean(updated && finished.build && finished.build >= updated);
-  ["plan", "build", "verify"].forEach((k, i) => { const st: boolean = carry ? Boolean(finished[k]) : before(k) && !(i === 0 && builtAfter); stale.push(st); carry ||= st; });
+  (verifyOn ? ["plan", "build", "verify"] : ["plan", "build"]).forEach((k, i) => { const st: boolean = carry ? Boolean(finished[k]) : before(k) && !(i === 0 && builtAfter); stale.push(st); carry ||= st; });
   stale.push(Boolean(finished.review) && (carry || (before("merged") && before("review"))));
   // Re-planned after the change: the stages after Plan belong to the new plan and show its progress, not stale (R4.S2).
-  if (updated && finished.plan && finished.plan >= updated) for (const i of [2, 3, 4]) stale[i] = false;
+  if (updated && finished.plan && finished.plan >= updated) for (let i = 2; i < stale.length; i++) stale[i] = false;
   return { stale, round };
 }
 

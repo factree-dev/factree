@@ -47,7 +47,7 @@ A verdict fails only for something you can point to in the diff. Minor style pre
 
 Use this section instead of the task review when every task has merged (building R9). Give the reviewer the branch diff file (from the merge base with the plan's base branch), the path of a checkout of the branch outside the repo, the profile's test and start commands, the lenses' gap checks and scale triggers, `plan.md` and the spec.
 
-You are reviewing a whole branch before it's verified and goes to human reviewers. Each task was already reviewed alone; look for what only shows across the whole branch:
+You are reviewing a whole branch before it goes to human reviewers. Each task was already reviewed alone; look for what only shows across the whole branch:
 - **The spec, end to end:** every in-scope scenario is delivered, and nothing a user or caller could notice was added beyond them.
 - **Consistency across tasks:** the same thing named or done two ways, duplicated logic, an interface one task produces and another uses differently.
 - **Risk areas:** what the plan's lenses say to watch (security, performance, concurrency, migrations).

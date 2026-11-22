@@ -13,7 +13,7 @@ Input: $ARGUMENTS
 Paths below: `<skill>` is this skill's base directory and `<plugin>` is two levels up from it. Shared scripts are in `<plugin>/scripts/`; the task subagent prompt is `<skill>/task-prompt.md` and the reviewer's is `<skill>/review-prompt.md`.
 
 <HARD-GATE>
-Build what the plan says, nothing else. Never edit the spec or the plan's design and tasks (ticking steps through `task-done.sh` is the only exception). Never push or merge (the review skill pushes, after verify), and never touch branches other than `factree/<work>` and its task branches. When reality disagrees with the plan, stop that task and route the problem (step 5).
+Build what the plan says, nothing else. Never edit the spec or the plan's design and tasks (ticking steps through `task-done.sh` is the only exception). Never push or merge (the review skill pushes), and never touch branches other than `factree/<work>` and its task branches. When reality disagrees with the plan, stop that task and route the problem (step 5).
 </HARD-GATE>
 
 ## Process
@@ -82,16 +82,23 @@ T2 failed: over budget (410 lines). 1. Split it as proposed? → yes (recommende
 
 Commits, line counts and what's waiting on what are in the plan; give them when asked.
 
-**Whole-branch review** (building R9). When every task has merged, log `bash <plugin>/scripts/event.sh stage.step <spec-id> '{"stage":"self-review","work":"<work-id>"}'`, then review the branch as a whole before verify:
+**Whole-branch review** (building R9). When every task has merged, log `bash <plugin>/scripts/event.sh stage.step <spec-id> '{"stage":"self-review","work":"<work-id>"}'`, then review the branch as a whole:
 1. Write the branch's diff to a file: `git log`, `git diff --stat` and `git diff -U10` from `git merge-base <base> factree/<work>` to `factree/<work>`, where `<base>` is the branch the plan branch was made from. Also make a detached worktree of `factree/<work>` in a scratch folder outside the repo and run the profile's install command there.
 2. Start a fresh reviewer on the most capable model with the **Branch** section of `<skill>/review-prompt.md`, giving it the diff file, the checkout's path, the profile's test and start commands, the loaded lenses' gap checks and scale triggers, `plan.md` and the spec, and nothing from this session.
 3. Its findings come back as **must fix**, **should fix** or **minor**, each with file and line and its evidence. Log `task.reviewed` with `{"task":"branch","findings":[{"severity","text","file","pattern","evidence","beyond_sources"}]}`.
-4. Must- and should-fix findings that aren't `beyond_sources` go to **one** fix implementer together. For each finding about behaviour it first adds a test that fails on the branch, then fixes, and reports both runs. A test that passes before any fix means "not reproduced": it changes no code and the test isn't kept. A finding not about behaviour is fixed without a test, and the report says so. Then **one** scoped re-review of the fix, on the checkout refreshed to the fix commit. Remove the checkout and its probes after the re-review (or after step 3, if nothing needs fixing). A must-fix still open after that fails the build: log `task.failed` with `{"task":"branch","reason":"<the finding>"}` and bring it to the user; don't verify. Should-fix findings still open are listed for the user.
+4. Must- and should-fix findings that aren't `beyond_sources` go to **one** fix implementer together. For each finding about behaviour it first adds a test that fails on the branch, then fixes, and reports both runs. A test that passes before any fix means "not reproduced": it changes no code and the test isn't kept. A finding not about behaviour is fixed without a test, and the report says so. Then **one** scoped re-review of the fix, on the checkout refreshed to the fix commit. Remove the checkout and its probes after the re-review (or after step 3, if nothing needs fixing). A must-fix still open after that fails the build: log `task.failed` with `{"task":"branch","reason":"<the finding>"}` and bring it to the user; don't open the pull request. Should-fix findings still open are listed for the user.
 5. In the closing message, say how many minor findings and calls there were (`decision.recorded` with `call: true` since the build started), and list them when the user asks; they're in the event log and go in the pull request's folded sections, so nothing decided for the user stays hidden. Add "1 suggestion not built" (or "<n> suggestions not built") for `beyond_sources` findings, listed when the user asks and in the pull request's "Suggested, not built" section; one whose text starts `security:` gets its own line.
 
-**A fix for a review comment** (review R5) is a task the review skill added to the plan; build it like any other, then verify.
+**A fix for a review comment** (review R5) is a task the review skill added to the plan; build it like any other.
 
-If every task is done and the whole-branch review left no must-fix open, the plan is **implemented**: go straight on to verify its spec (factory-flow R3). Say "Verifying <spec-id>.", load `<plugin>/skills/verify/SKILL.md` and follow it, then end with its result and that `factree/<work>` is ready for review and merging. That is where the run hands back to the user. Review, push and merge are theirs; never start them. If any task failed or is blocked, don't verify: stop and bring those to the user. With `flow: step` in the preferences, say the plan is implemented and that verify comes next, and stop.
+If every task is done and the whole-branch review left no must-fix open, the plan is **implemented**: go straight on to review (factory-flow R3), after proposing lessons as below. If any task failed or is blocked, stop and bring those to the user. With `flow: step` in the preferences, propose the lessons, then say the plan is implemented and that review comes next, and stop.
+
+**Lessons first** (self-improving R7): run `bash <plugin>/scripts/lessons.sh`. Each line is a candidate: key, count, file, change, evidence. Take at most the first 3. For each, log `lesson.proposed` on the spec with `{"key","text","file","change","evidence":[<times>]}`, where `text` says in one sentence what it changes and why. Present them as one brief ("Lessons (approve, "not this", or changes)", numbered, each with the line it adds) and wait as for any decision (the companion's lesson cards answer too).
+- **Approved:** append the change to its file in the workspace, followed by `<!-- lesson <key>, from <evidence times> -->`. Lens rules go under the lens's **Patterns to inventory**; profile rules under the profile's patterns; checklist questions as `- [ ] <question>` in `checklists/spec.md` or `checklists/plan.md`; defaults as one line each in `defaults.md`. Create the file if needed. Log `lesson.approved` with `{"key","by"}` when it's approved here.
+- **Not this:** log `lesson.rejected` with `{"key","by"}`. It won't be proposed again.
+- No lines from the script: say nothing about lessons.
+
+**Then review:** say "Opening the pull request for <work>.", load `<plugin>/skills/review/SKILL.md` and follow it.
 
 ## Logging events
 
@@ -112,5 +119,5 @@ When the build starts and when it finishes, run `bash <plugin>/scripts/link.sh <
 | "The subagent said 180 lines" | Measure it yourself. |
 | "The spec doesn't say, I'll pick the obvious behaviour" | That's a behaviour decision. Block the task and route it to /factree:spec. |
 | "I'll fix the plan's interface while I'm here" | The plan is approved. Block and route it to /factree:plan. |
-| "I'll push the branch so it's safe" | Never push from build. The review skill pushes, after verify. Nothing ever merges. |
+| "I'll push the branch so it's safe" | Never push from build. The review skill pushes. Nothing ever merges. |
 | "Let me run T3 too, it barely depends on T2" | Dependencies are the plan's decision. Wait for T2. |

@@ -1,4 +1,5 @@
 import type { SpecDetail } from "../../shared/types.ts";
+import { VERIFY_ON } from "../features.ts";
 import { CopyCommand } from "./bits.tsx";
 import { refHref } from "../links.ts";
 import { reviewLabel } from "../words.ts";
@@ -23,7 +24,7 @@ export function ReviewView({ detail }: { detail: SpecDetail }) {
         )}
       </div>
       {!r ? (
-        <div className="notice">No pull request yet. It opens after a clean verify, or in Claude Code: {p ? <CopyCommand command={`/factree:review ${p.work}`} /> : "plan and build it first"}</div>
+        <div className="notice">No pull request yet. {VERIFY_ON ? "It opens after a clean verify, or in Claude Code:" : "Open it in Claude Code:"} {p ? <CopyCommand command={`/factree:review ${p.work}`} /> : "plan and build it first"}</div>
       ) : r.comments.length === 0 ? (
         <div className="notice">No review comments yet.</div>
       ) : (

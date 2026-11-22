@@ -45,15 +45,15 @@ Every case must also pass:
 **Expect:** rerunning /factree:build skips T1 and builds the new tasks.
 
 
-## Built, then verified [factory-flow#R3.S1] [factory-flow#R4.S3]
+## Paused with verify (verify-paused): built, then verified [factory-flow#R3.S1] [factory-flow#R4.S3]
 
 **Setup:** an approved plan whose tasks all pass.
-**Expect:** after the last task merges, Claude says "Verifying <spec>.", runs verify, and ends with "<spec>: N proved · 0 failing · 0 unverified" and that `factree/<work>` is ready for review. Nothing is pushed, no pull request is opened, nothing is merged into main.
+**Expect (before the pause):** after the last task merges, Claude says "Verifying <spec>.", runs verify, and ends with "<spec>: N proved · 0 failing · 0 unverified" and that `factree/<work>` is ready for review. Nothing is pushed, no pull request is opened, nothing is merged into main.
 
 ## A failed task stops it [factory-flow#R3.S2]
 
 **Setup:** a plan where one task exceeds its review budget.
-**Expect:** the other tasks finish, then Claude stops before verify and reports the failed task.
+**Expect:** the other tasks finish, then Claude stops before opening the pull request and reports the failed task.
 
 
 ## Evidence with every claim [verifying#R3.S1] [verifying#R3.S2]
@@ -118,17 +118,17 @@ Every case must also pass:
 ## Clean branch [building#R9.S1]
 
 **Setup:** a plan whose 3 tasks merge with no must- or should-fix issues across the branch.
-**Expect:** after the last task, a whole-branch review runs on the most capable model; the closing message lists 1 minor finding and the build's calls, and the run goes on to verify.
+**Expect:** after the last task, a whole-branch review runs on the most capable model; the closing message lists 1 minor finding and the build's calls, and the run goes on to open the pull request.
 
 ## One must-fix [building#R9.S2]
 
 **Setup:** two tasks that call the same helper with different argument orders.
-**Expect:** the branch review reports it as must fix; one fix round corrects it, the re-review passes, and the run goes on to verify.
+**Expect:** the branch review reports it as must fix; one fix round corrects it, the re-review passes, and the run goes on to open the pull request.
 
 ## Still open [building#R9.S3]
 
 **Setup:** a must-fix finding the fix round doesn't resolve.
-**Expect:** the build stops before verify with `task.failed` for `branch`, and the finding goes to the user.
+**Expect:** the build stops before the pull request with `task.failed` for `branch`, and the finding goes to the user.
 
 
 ## Branch review probes [factory-quality#R1.S1] [factory-quality#R1.S2] [factory-quality#R1.S3] [factory-quality#R1.S4] [factory-quality#R1.S5] [factory-quality#R1.S6]
@@ -163,7 +163,7 @@ Every case must also pass:
 - (c) no code change, no test kept, reported "not reproduced" [R2.S3].
 **Before the change:** the A/B run's fix implementer changed code with no before or after test runs (commit `9c43f55` in `r2-with-factree.git`).
 
-## Self-review and verify logged [live-activity#R4.S2]
+## Paused with verify (verify-paused): self-review and verify logged [live-activity#R4.S2]
 
 **Setup:** a build whose tasks all merge.
 **Expect:** a `stage.step` with stage `self-review` before the whole-branch review result, then one with stage `verify` before `spec.verified`.
@@ -191,6 +191,29 @@ Every case must also pass:
 **Setup:** (a) a one-file task estimated at 120 lines whose steps give its exact tests and signatures; (b) a task estimated at 220 lines across three files.
 **Expect:** (a) its builder runs on the cheapest model, and its reviewer `Review <work> T<n>` gets the diff file and opens other files only to check a risk it names; (b) the builder runs on the standard model [R4.S4].
 **Before the change:** in round 4 builders and reviewers ran on the session model.
+
+## Verify can't be invoked [verify-paused#R1.S2]
+
+**Setup:** the plugin installed; the user types `/factree:verify`.
+**Expect:** no such command; the plugin's skill list has no verify. Its files are under `plugins/factree/paused/verify/`.
+**Before the change:** `/factree:verify` ran the test suites and marked scenarios.
+
+## A clean build opens the PR [verify-paused#R2.S1]
+
+**Setup:** every task done, the whole-branch review left no must-fix, `flow: auto`.
+**Expect:** Claude says "Opening the pull request for <work>." and loads the review skill. It never says "Verifying", logs no `spec.verified`, and `stage.step` with stage `verify` isn't logged [R2.S1].
+**Before the change:** it said "Verifying <spec>." and ran verify first.
+
+## Must-fix still stops [verify-paused#R2.S2]
+
+**Setup:** the whole-branch review leaves a must-fix open after one fix round.
+**Expect:** `task.failed` for `branch`, the finding goes to the user, and no pull request is opened [R2.S2].
+
+## Lessons at the end of the build [verify-paused#R2.S3]
+
+**Setup:** an events log where `lessons.sh` prints 2 candidates.
+**Expect:** before the pull request, the build proposes both as one brief (`lesson.proposed`) and waits as for any decision. With no candidates it says nothing about lessons [R2.S3].
+**Before the change:** verify proposed them after its result.
 
 ---
 

@@ -1,4 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
+import { vi } from "vitest";
+vi.mock("../src/features.ts", () => ({ VERIFY_ON: true }));
 import { mkdtempSync, mkdirSync, writeFileSync, cpSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";

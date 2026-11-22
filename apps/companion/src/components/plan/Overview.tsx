@@ -31,7 +31,7 @@ export function Overview({ plan, spec, specId }: { plan: Plan; spec: Spec | null
     <div className="columns">
       <section className="col-main" aria-label="Plan overview">
         {context && <div className="md"><Blocks blocks={context.blocks} /></div>}
-        <div className="section-head"><h2 className="section">Coverage</h2><span className="count">{rows.length - missing.length}/{rows.length} in-scope scenarios proved</span></div>
+        <div className="section-head"><h2 className="section">Coverage</h2><span className="count">{rows.length - missing.length}/{rows.length} in-scope scenarios covered</span></div>
         {rows.length > 0 ? (
           <div className="md-table-wrap">
             <table className="md-table">

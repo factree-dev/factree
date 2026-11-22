@@ -535,7 +535,7 @@ echo "# short output, detail folded"
 # The pull request template in the review skill: from the fence after "The description" to the closing fence.
 tpl=$(awk '/The description \(R2\)/{f=1; next} f && /^```/{n++; if(n==2) exit; next} f && n==1' plugins/factree/skills/review/SKILL.md)
 check "the pull request opens with a short summary [concise-output#R3.S1]" '[ -n "$tpl" ] && [ $(printf "%s\n" "$tpl" | awk "/<details>/{exit} NF{c++} END{print c+0}") -le 6 ] && ! printf "%s\n" "$tpl" | awk "/<details>/{f=1} f" | grep -q "^## "'
-check "every section is still there, folded [concise-output#R4.S1]" 'for s in "Spec:" "What changed" "Verified" "Where to look" "Calls Claude made" "How to test"; do printf "%s\n" "$tpl" | grep -q "<details><summary>$s" || echo missing; done | grep -q missing; [ $? -ne 0 ]'
+check "every section is still there, folded [concise-output#R4.S1]" 'for s in "Spec:" "What changed" "Where to look" "Calls Claude made" "How to test"; do printf "%s\n" "$tpl" | grep -q "<details><summary>$s" || echo missing; done | grep -q missing; [ $? -ne 0 ]'
 
 echo "# codebase health"
 check "script helpers once [codebase-health#R4.S1]" '[ "$(grep -lE "^(esc|fieldof|field|json_escape|json_field)\(\)" $P/scripts/*.sh $P/skills/*/scripts/*.sh)" = "$P/scripts/lib.sh" ]'
@@ -599,7 +599,10 @@ check "a stale built UI fails the checks [ci#R1.S2]" 'grep -q "git diff --exit-c
 check "every file has a code owner [ci#R2.S1]" 'grep -qE "^\* +@factree-ai-dev$" .github/CODEOWNERS'
 
 echo "# readme commands"
-cmds_missing=$(for c in spec plan build verify review ui init; do awk '/^## Commands/{f=1;next} /^## /{f=0} f' README.md | grep -q "/factree:$c\`" || echo "$c"; done)
-check "the README lists the commands, no How it works [readme#R2.S1]" '! grep -q "^## How it works" README.md && grep -q "^## Commands" README.md && [ -z "$cmds_missing" ]'
+cmds_missing=$(for c in spec plan build review ui init; do awk '/^## Commands/{f=1;next} /^## /{f=0} f' README.md | grep -q "/factree:$c\`" || echo "$c"; done)
+check "the README lists the commands, no How it works [readme#R2.S1]" '! grep -q "^## How it works" README.md && grep -q "^## Commands" README.md && [ -z "$cmds_missing" ] && ! grep -q "/factree:verify" README.md'
+
+echo "# verify paused"
+check "verify is not a skill, and is kept [verify-paused#R1.S1]" '[ ! -e $P/skills/verify ] && [ -f $P/paused/verify/SKILL.md ]'
 
 exit $fail

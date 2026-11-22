@@ -1,4 +1,6 @@
 import { describe, it, expect } from "vitest";
+import { vi } from "vitest";
+vi.mock("../src/features.ts", () => ({ VERIFY_ON: true }));
 import { tokenize, codeHref, planHref, type LinkEnv } from "../src/links.ts";
 import { webUrlFromRemote } from "../server/repo.ts";
 
