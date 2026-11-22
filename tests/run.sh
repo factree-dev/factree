@@ -331,6 +331,53 @@ touch "$tmp/bin/fail"; wr
 check "wait stops when gh fails" 'grep -q "^review: gh failed: gh: authentication required$" "$tmp/out"'
 rm -rf "$tmp"
 
+echo "# review, several repos"
+tmp=$(mktemp -d); mkdir -p "$tmp/ws/.factree" "$tmp/bin"; : > "$tmp/ws/.factree/events.jsonl"
+for r in backend frontend; do mkdir -p "$tmp/ws/$r"; git -C "$tmp/ws/$r" init -q; done
+git -C "$tmp/ws/backend" remote add origin https://github.com/acme/backend.git
+git -C "$tmp/ws/frontend" remote add origin git@github.com:acme/frontend.git
+# A fake gh that answers per -R (pr view) or per repos/acme/<repo> (api), from state-<repo> and comments-<repo> files.
+cat > "$tmp/bin/gh" <<'GH'
+#!/usr/bin/env bash
+d="$(dirname "$0")"; r=""
+if [ "$1" = pr ]; then while [ $# -gt 0 ]; do [ "$1" = -R ] && r=${2#acme/}; shift; done; cat "$d/state-$r"
+else r=${2#repos/acme/}; r=${r%%/*}; case "$2" in */pulls/*) cat "$d/comments-$r" ;; esac; fi
+GH
+chmod +x "$tmp/bin/gh"
+for r in backend frontend; do printf 'OPEN MERGEABLE REVIEW_REQUIRED\n' > "$tmp/bin/state-$r"; : > "$tmp/bin/comments-$r"
+  (cd "$tmp/ws/$r" && bash $EVENT review.opened 062-x "{\"pr\":\"7\",\"url\":\"u\",\"repo\":\"$r\",\"tasks\":\"T1\",\"base\":\"main\"}"); done
+wm() { (cd "$tmp/ws/frontend" && PATH="$tmp/bin:$PATH" FACTREE_WAIT_EVERY=0.2 FACTREE_WAIT_FOR=1 bash "$WR" 062-x "$@" > "$tmp/out" 2>&1); }
+printf '201\037priya\037a.ts\0373\037fix this\n' > "$tmp/bin/comments-frontend"; wm frontend
+check "a comment on frontend #7 is logged for frontend, not backend #7 [multi-repo#R8.S3]" 'grep -q "\"type\":\"review.comment\".*\"id\":\"201\".*\"repo\":\"frontend\"" "$tmp/ws/.factree/events.jsonl" && ! grep "review.comment" "$tmp/ws/.factree/events.jsonl" | grep -q "\"repo\":\"backend\"" && grep -q "^review: comment by priya" "$tmp/out"'
+printf 'MERGED UNKNOWN \n' > "$tmp/bin/state-backend"; wm backend 7
+check "each repo's state is its own, logged with its repo" 'grep -q "\"type\":\"review.state\".*\"pr\":\"7\",\"state\":\"MERGED\",\"repo\":\"backend\"" "$tmp/ws/.factree/events.jsonl" && ! grep "review.state" "$tmp/ws/.factree/events.jsonl" | grep -q "\"repo\":\"frontend\""'
+wm
+check "two repos and no repo named: it says which to name" 'grep -q "^review: 062-x has pull requests in several repos (backend,frontend): name one" "$tmp/out" && [ $(wc -l < "$tmp/out") -eq 1 ]'
+git -C "$tmp/ws/frontend" remote set-url origin https://gitlab.com/acme/frontend.git; wm frontend
+check "a non-GitHub remote stops the follower with one line" 'grep -q "^review: frontend.s origin is not a GitHub remote" "$tmp/out" && [ $(wc -l < "$tmp/out") -eq 1 ]'
+rm -rf "$tmp"
+
+echo "# review catch-up, several repos"
+CU="$(pwd)/$P/scripts/review-catchup.sh"
+tmp=$(mktemp -d); mkdir -p "$tmp/ws/.factree" "$tmp/bin"; : > "$tmp/ws/.factree/events.jsonl"
+for r in backend frontend infra; do mkdir -p "$tmp/ws/$r"; git -C "$tmp/ws/$r" init -q; done
+git -C "$tmp/ws/backend" remote add origin https://github.com/acme/backend.git
+git -C "$tmp/ws/frontend" remote add origin git@github.com:acme/frontend.git
+git -C "$tmp/ws/infra" remote add origin ssh://git@github.com/acme/infra.git
+cat > "$tmp/bin/gh" <<'GH'
+#!/usr/bin/env bash
+echo "$*" >> "$(dirname "$0")/calls"; [ "$1" = pr ] && echo "OPEN MERGEABLE REVIEW_REQUIRED"; exit 0
+GH
+chmod +x "$tmp/bin/gh"
+for r in backend frontend; do (cd "$tmp/ws/$r" && bash $EVENT review.opened 062-x "{\"pr\":\"7\",\"url\":\"u\",\"repo\":\"$r\",\"base\":\"main\"}"); done
+(cd "$tmp/ws/backend" && bash $EVENT review.state 062-x '{"pr":"7","state":"MERGED","repo":"backend"}')
+(cd "$tmp/ws/frontend" && PATH="$tmp/bin:/usr/bin:/bin" bash "$CU" >/dev/null 2>&1)
+check "catch-up skips the merged #7 in backend and still checks frontend's #7 [multi-repo#R8.S3]" '! grep -q "acme/backend" "$tmp/bin/calls" && grep -q "^pr view 7 -R acme/frontend" "$tmp/bin/calls"'
+(cd "$tmp/ws/infra" && bash $EVENT review.opened 062-y '{"pr":"3","url":"u","repo":"infra","base":"main"}')
+: > "$tmp/bin/calls"; (cd "$tmp/ws/infra" && PATH="$tmp/bin:/usr/bin:/bin" bash "$WR" 062-y infra --once >/dev/null 2>&1)
+check "an ssh:// origin parses to acme/infra" 'grep -q "^pr view 3 -R acme/infra" "$tmp/bin/calls"'
+rm -rf "$tmp"
+
 echo "# review catch-up"
 CU="$(pwd)/$P/scripts/review-catchup.sh"
 tmp=$(mktemp -d); mkdir -p "$tmp/ws/.factree" "$tmp/ws/repo" "$tmp/bin" "$tmp/nogh"; : > "$tmp/ws/.factree/events.jsonl"
