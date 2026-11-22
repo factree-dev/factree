@@ -27,8 +27,8 @@ describe("build status", () => {
     ]);
     const plan = specDetail(root, "widget-export")!.plans[0]!;
     expect(plan.build).toEqual({
-      T1: { status: "done", commit: "abc1234", lines: 120 },
-      T2: { status: "running" },
+      T1: { status: "done", phase: "merged", commit: "abc1234", lines: 120 },
+      T2: { status: "running", phase: "building" },
       T3: { status: "waiting" },
     });
     expect(plan.implementedAt).toBe("");
@@ -62,6 +62,6 @@ describe("the Build stage", () => {
 
   it("counts done tasks on the stage", () => {
     events([ev(5, "task.done", { task: "T1", commit: "abc1234", lines: 120, tests: "npm test" })]);
-    expect(buildStage(specDetail(root, "widget-export")!.summary).sub).toBe("1/3 tasks done");
+    expect(buildStage(specDetail(root, "widget-export")!.summary).sub).toBe("1/3 merged");
   });
 });

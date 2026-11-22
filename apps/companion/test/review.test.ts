@@ -67,7 +67,7 @@ describe("the Review stage", () => {
   it("fix under way [review#R8.S2]", () => {
     const s = summary({ plan: { work: "002-link-report", status: "approved", approvedAt: "2026-11-18", others: 0, tasks: 4, done: 3, implemented: false,
       review: { url: "https://github.com/o/r/pull/7", state: "CHANGES_REQUESTED", comments: [] } } });
-    expect(buildStage(s).sub).toBe("3/4 tasks done");
+    expect(buildStage(s).sub).toBe("3/4 merged");
     expect(reviewStage(s)).toMatchObject({ sub: "Changes requested", href: "/work/link-report/review" });
   });
 

@@ -117,22 +117,51 @@ var STAGE_LABEL = {
 var ENDS = /* @__PURE__ */ new Set([
 	"spec.approved",
 	"plan.approved",
-	"plan.implemented",
 	"task.failed",
 	"task.blocked",
 	"spec.verified",
-	"review.opened"
+	"review.opened",
+	"branch.reviewed"
 ]);
 /** What's running on a spec now: the newest progress event that nothing has ended since (live-activity R1–R3). */
 function activityOf(id, events, plans, now) {
 	const works = new Set(plans.map((p) => p.work));
 	let cur = null;
 	let before = null;
+	const builders = /* @__PURE__ */ new Set(), reviewers = /* @__PURE__ */ new Set();
+	let probing = false;
+	const idle = () => {
+		cur = null;
+		before = null;
+		builders.clear();
+		reviewers.clear();
+		probing = false;
+	};
 	for (const e of events) {
 		if (e.spec !== id && !(e.work && works.has(e.work))) continue;
-		if (ENDS.has(e.type)) {
-			cur = null;
-			before = null;
+		if (ENDS.has(e.type) || e.type === "plan.implemented" && !probing) {
+			idle();
+			continue;
+		}
+		if (e.type === "plan.implemented") continue;
+		if (e.type === "agent.started") {
+			const task = String(e.data.task ?? ""), role = String(e.data.role ?? "");
+			if (role === "review" && task === "branch") probing = true;
+			else if (role === "review") {
+				builders.delete(task);
+				reviewers.add(task);
+			} else if (role === "build") {
+				reviewers.delete(task);
+				builders.add(task);
+			} else continue;
+			if (!cur?.asking) cur = {
+				stage: "build",
+				label: "Building",
+				step: "",
+				since: e.ts,
+				paused: false,
+				asking: false
+			};
 			continue;
 		}
 		if (e.type === "spec.step") cur = {
@@ -154,7 +183,12 @@ function activityOf(id, events, plans, now) {
 				asking: false
 			};
 		} else if (e.type === "task.started" || e.type === "task.done") {
-			if (!cur || cur.label !== "Self-reviewing") cur = {
+			const t = String(e.data.task ?? "");
+			if (e.type === "task.done") {
+				builders.delete(t);
+				reviewers.delete(t);
+			}
+			if (!cur || cur.label !== "Self-reviewing" && !probing) cur = {
 				stage: "build",
 				label: "Building",
 				step: "",
@@ -180,6 +214,19 @@ function activityOf(id, events, plans, now) {
 		}
 	}
 	if (!cur) return null;
+	const list = (x) => [...x].sort().join(", ");
+	if (!cur.asking && cur.stage === "build" && cur.label !== "Self-reviewing") {
+		if (probing) {
+			cur.label = "Probing the branch";
+			cur.step = "";
+		} else if (builders.size) {
+			cur.label = "Building";
+			cur.step = list(builders) + (reviewers.size ? ` · Reviewing ${list(reviewers)}` : "");
+		} else if (reviewers.size) {
+			cur.label = "Reviewing";
+			cur.step = list(reviewers);
+		}
+	}
 	if (cur.label === "Building" && !cur.step) {
 		const p = plans[0];
 		const running = p ? Object.entries(p.build).find(([, b]) => b.status === "running")?.[0] : void 0;
@@ -1126,7 +1173,8 @@ function brief(plans, events = []) {
 		tasks: builds.length,
 		done: builds.filter((b) => b.status === "done").length,
 		implemented: Boolean(p.implementedAt),
-		review: reviewOf(p.work, events)
+		review: reviewOf(p.work, events),
+		...p.branchReview ? { branchReview: p.branchReview } : {}
 	};
 }
 /** The plan's newest pull request: state and comments with how each was handled (review R8). */
@@ -1207,12 +1255,56 @@ function buildStatus(plan, events) {
 	const out = {};
 	for (const v of plan.verticals) for (const t of v.tasks ?? []) out[t.id] = { status: "waiting" };
 	for (const e of events) {
-		if (e.work !== plan.work || !e.type.startsWith("task.")) continue;
+		if (e.work !== plan.work || !(e.type.startsWith("task.") || e.type === "agent.started")) continue;
 		const id = String(e.data.task ?? "");
 		if (!(id in out)) continue;
-		if (e.type === "task.started") out[id] = { status: "running" };
+		const b = out[id], role = e.data.role;
+		if (e.type === "agent.started") {
+			if (role === "build") out[id] = {
+				...b,
+				phase: "building",
+				model: String(e.data.model ?? ""),
+				reviewerRecorded: false
+			};
+			else if (role === "review") out[id] = {
+				...b,
+				phase: "reviewing",
+				reviewerRecorded: true
+			};
+		} else if (e.type === "task.waiting") out[id] = {
+			...b,
+			phase: "waiting",
+			reason: String(e.data.reason ?? "")
+		};
+		else if (e.type === "task.fixing") out[id] = {
+			...b,
+			phase: "fixing",
+			round: Number(e.data.round ?? 0),
+			cause: String(e.data.cause ?? ""),
+			reviewerRecorded: false
+		};
+		else if (e.type === "task.reviewed") {
+			const fs = Array.isArray(e.data.findings) ? e.data.findings : [];
+			if (e.data.round !== void 0) out[id] = {
+				...b,
+				round: Number(e.data.round),
+				cause: String(e.data.cause ?? "")
+			};
+			else out[id] = {
+				...b,
+				verdict: `${String(e.data.spec ?? "")}/${String(e.data.quality ?? "")}`,
+				findings: fs.filter((f) => !f.beyond_sources).length,
+				suggestions: fs.filter((f) => f.beyond_sources).length
+			};
+		} else if (e.type === "task.started") out[id] = {
+			...b,
+			status: "running",
+			phase: "building"
+		};
 		else if (e.type === "task.done") out[id] = {
+			...b,
 			status: "done",
+			phase: "merged",
 			commit: String(e.data.commit ?? ""),
 			lines: Number(e.data.lines ?? 0)
 		};
@@ -1222,6 +1314,86 @@ function buildStatus(plan, events) {
 		};
 	}
 	return out;
+}
+/** The branch review of the plan's latest run: a new branch reviewer starts a fresh run, so its findings replace the last's (build-visibility R3). */
+function branchReviewOf(work, events) {
+	let br = null;
+	for (const e of events) {
+		if (e.work !== work) continue;
+		const d = e.data, branch = d.task === "branch";
+		if (e.type === "agent.started" && d.role === "review" && branch) {
+			if (br?.phase === "fixing") br.phase = "probing";
+			else br = {
+				phase: "probing",
+				findings: [],
+				notProbed: [],
+				rounds: [],
+				verdict: "",
+				must: 0,
+				should: 0
+			};
+		} else if (e.type === "task.reviewed" && branch) {
+			br ??= {
+				phase: "probing",
+				findings: [],
+				notProbed: [],
+				rounds: [],
+				verdict: "",
+				must: 0,
+				should: 0
+			};
+			br.phase = "probing";
+			if (d.round !== void 0) {
+				if (!br.rounds.some((r) => r.round === Number(d.round))) br.rounds.push({
+					round: Number(d.round),
+					cause: String(d.cause ?? "")
+				});
+			} else {
+				br.findings = (Array.isArray(d.findings) ? d.findings : []).map((f) => ({
+					severity: String(f.severity ?? ""),
+					text: String(f.text ?? ""),
+					evidence: String(f.evidence ?? "")
+				}));
+				br.notProbed = (Array.isArray(d.not_probed) ? d.not_probed : []).map((n) => ({
+					area: String(n.area ?? ""),
+					reason: String(n.reason ?? "")
+				}));
+			}
+		} else if (e.type === "task.fixing" && branch) {
+			br ??= {
+				phase: "fixing",
+				findings: [],
+				notProbed: [],
+				rounds: [],
+				verdict: "",
+				must: 0,
+				should: 0
+			};
+			br.phase = "fixing";
+			br.rounds = [...br.rounds.filter((r) => r.round !== Number(d.round)), {
+				round: Number(d.round ?? 0),
+				cause: String(d.cause ?? "")
+			}];
+		} else if (e.type === "branch.reviewed") {
+			br ??= {
+				phase: "ended",
+				findings: [],
+				notProbed: [],
+				rounds: [],
+				verdict: "",
+				must: 0,
+				should: 0
+			};
+			br = {
+				...br,
+				phase: "ended",
+				verdict: String(d.verdict ?? ""),
+				must: Number(d.must ?? 0),
+				should: Number(d.should ?? 0)
+			};
+		}
+	}
+	return br;
 }
 /** Every plan in `work/`, newest (highest number) first. A folder with no plan, design or task file isn't a plan (plan-view R11.S3). */
 function readPlans(root, events = [], specs = /* @__PURE__ */ new Map(), live = []) {
@@ -1256,6 +1428,7 @@ function readPlans(root, events = [], specs = /* @__PURE__ */ new Map(), live = 
 		p.stale = isStale(p, events, specs.get(p.spec));
 		p.sessions = sessionsFor(events, (e) => e.work === work, live);
 		p.build = buildStatus(p, events);
+		p.branchReview = branchReviewOf(work, events);
 		out.push(p);
 	}
 	return out;
