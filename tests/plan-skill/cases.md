@@ -212,6 +212,11 @@ Every case must also pass:
 **Setup:** as above, but the new task needs a library the repo doesn't use.
 **Expect:** the library is asked as a decision; the plan is approved again only after the answer.
 
+## Shared interface keeps its dependency [parallel-build#R3.S2]
+
+**Setup:** plan a spec where a PATCH route and a DELETE route in one file both use a new `findLink(id)` helper.
+**Expect:** the later task's `**Depends on:**` names the earlier one with that reason (`T1 (findLink)`); they aren't cut apart as if independent.
+
 ---
 
 ## Results

@@ -47,7 +47,7 @@ Each task is one reviewable change: it ends with tests passing, is one commit, a
 ### T2: Count opens
 
 **Proves:** url-shortener#R3.S1
-**Depends on:** T1
+**Depends on:** T1 (the link model it reads)
 **Est. diff:** ~80 lines
 
 **Files**
