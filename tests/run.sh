@@ -404,6 +404,8 @@ rm -rf "$tmp"
 echo "# build progress"
 TD="$(pwd)/$P/scripts/task-done.sh"
 tmp=$(mktemp -d); mkdir -p "$tmp/.factree/work"; cp -R tests/validate-plan/verticals/plan "$tmp/.factree/work/007-widget-export"
+rv() { FACTREE_HOME="$1/.factree" bash $EVENT task.reviewed 007-widget-export "{\"task\":\"$2\",\"spec\":\"$3\",\"quality\":\"${4:-pass}\"}"; }
+for t in T1 T2 T3; do rv "$tmp" $t pass; done
 out=$(FACTREE_HOME="$tmp/.factree" bash "$TD" 007-widget-export T1 abc1234 120 "npm test")
 check "marking a task done ticks its steps and logs it [build#R4.S1]" '! awk "/^### T1:/{f=1;next} /^### /{f=0} f" "$tmp/.factree/work/007-widget-export/backend/tasks.md" | grep -q "^- \[ \]" && grep -q "\"type\":\"task.done\",\"work\":\"007-widget-export\".*\"task\":\"T1\",\"commit\":\"abc1234\",\"lines\":120" "$tmp/.factree/events.jsonl" && awk "/^### T3:/{f=1;next} f" "$tmp/.factree/work/007-widget-export/backend/tasks.md" | grep -q "^- \[ \]"'
 FACTREE_HOME="$tmp/.factree" bash $EVENT task.failed 007-widget-export '{"task":"T2","reason":"over budget"}'
@@ -412,6 +414,20 @@ check "a failed task keeps the plan from implemented [build#R6.S2]" '! grep -q "
 out=$(FACTREE_HOME="$tmp/.factree" bash "$TD" 007-widget-export T2 0a0b0c0 60 "npm test")
 check "the last task marks the plan implemented [build#R6.S1]" 'grep -q "^implemented_at: 20" "$tmp/.factree/work/007-widget-export/plan.md" && grep -q "\"type\":\"plan.implemented\",\"work\":\"007-widget-export\"" "$tmp/.factree/events.jsonl" && echo "$out" | grep -q "007-widget-export implemented"'
 check "unknown task is refused" '! FACTREE_HOME="$tmp/.factree" bash "$TD" 007-widget-export T9 x 1 y 2>/dev/null'
+rm -rf "$tmp"
+rtmp() { tmp=$(mktemp -d); mkdir -p "$tmp/.factree/work"; cp -R tests/validate-plan/verticals/plan "$tmp/.factree/work/007-widget-export"; }
+tdr() { FACTREE_HOME="$tmp/.factree" bash "$TD" 007-widget-export T2 abc1234 60 "npm test" 2>&1; echo "rc=$?"; }
+t2open() { awk "/^### T2:/{f=1;next} /^### /{f=0} f" "$tmp/.factree/work/007-widget-export/"*/tasks.md | grep -q "^- \[ \]"; }
+rtmp; rv "$tmp" T2 pass; out=$(tdr)
+check "reviewed and passing is marked [parallel-build#R5.S1]" 'echo "$out" | grep -q "^T2 done$" && echo "$out" | grep -q "rc=0" && ! t2open'
+rtmp; out=$(tdr)
+check "never reviewed exits 3, ticks and logs nothing [parallel-build#R5.S2]" 'echo "$out" | grep -q "^T2 has no passing review$" && echo "$out" | grep -q "rc=3" && t2open && ! grep -q task.done "$tmp/.factree/events.jsonl" 2>/dev/null'
+rtmp; rv "$tmp" T2 fail; out=$(tdr)
+check "a failed review blocks [parallel-build#R5.S3]" 'echo "$out" | grep -q "rc=3" && t2open'
+rtmp; rv "$tmp" T2 pass; rv "$tmp" T2 fail; FACTREE_HOME="$tmp/.factree" bash $EVENT task.reviewed 007-widget-export '{"task":"T2","round":2,"cause":"spec"}'; out=$(tdr)
+check "a pass then a failing re-review blocks [parallel-build#R5.S4]" 'echo "$out" | grep -q "rc=3" && t2open'
+rtmp; FACTREE_HOME="$tmp/.factree" bash $EVENT task.reviewed 008-other '{"task":"T2","spec":"pass","quality":"pass"}'; out=$(tdr)
+check "another plan's review doesn't count [parallel-build#R5.S5]" 'echo "$out" | grep -q "rc=3" && t2open'
 rm -rf "$tmp"
 
 echo "# verify"
