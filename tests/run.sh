@@ -395,6 +395,11 @@ check "never warns on a prompt [version-check#R2.S3]" '[ -z "$out" ]'
 mkdir -p "$tmp/ws2/.factree" "$tmp/ws2/repo"; echo "{\"ts\":\"2026-11-17T10:00:00Z\",\"type\":\"spec.step\",\"spec\":\"demo\",\"v\":\"$V\",\"data\":{}}" > "$tmp/ws2/.factree/events.jsonl"
 out=$(echo "{\"session_id\":\"s8\",\"hook_event_name\":\"SessionStart\",\"cwd\":\"$tmp/ws2/repo\"}" | bash $P/scripts/session-hook.sh)
 check "silent when current [version-check#R2.S2]" '! echo "$out" | grep -q "is older than"'
+mkdir -p "$tmp/fresh" && git -C "$tmp/fresh" init -q
+out=$(echo "{\"session_id\":\"h1\",\"hook_event_name\":\"SessionStart\",\"cwd\":\"$tmp/fresh\"}" | env -u FACTREE_HOME bash $P/scripts/session-hook.sh)
+check "a fresh repo gets the /factree:spec hint [factory-quality#R8.S3]" '[ $(echo "$out" | grep -c "/factree:spec") -eq 1 ] && [ ! -e "$tmp/fresh/.factree" ]'
+out=$(echo "{\"session_id\":\"h2\",\"hook_event_name\":\"SessionStart\",\"cwd\":\"$tmp/ws2/repo\"}" | bash $P/scripts/session-hook.sh)
+check "a repo with a workspace gets no hint [factory-quality#R8.S3]" '! echo "$out" | grep -q "/factree:spec"'
 mkdir -p "$tmp/p10/scripts" "$tmp/p10/.claude-plugin"; cp $P/scripts/*.sh "$tmp/p10/scripts/"; echo '{"name":"factree","version":"0.10.0"}' > "$tmp/p10/.claude-plugin/plugin.json"
 echo '{"ts":"2026-11-17T10:00:00Z","type":"spec.step","spec":"demo","v":"0.9.0","data":{}}' > "$tmp/ws2/.factree/events.jsonl"
 out=$(echo "{\"session_id\":\"s7\",\"hook_event_name\":\"SessionStart\",\"cwd\":\"$tmp/ws2/repo\"}" | bash "$tmp/p10/scripts/session-hook.sh")

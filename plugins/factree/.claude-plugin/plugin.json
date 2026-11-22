@@ -1,6 +1,6 @@
 {
   "name": "factree",
-  "version": "0.14.0",
+  "version": "0.14.1",
   "license": "MIT",
   "description": "A self-improving software factory for Claude Code: any requirement becomes a spec grounded in your code, then a plan, test-first code reviewed task by task, a verify that marks every scenario proved or not, and a GitHub pull request, stopping only when it needs your decision. With a live companion page to follow and decide from."
 }

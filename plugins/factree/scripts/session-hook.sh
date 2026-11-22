@@ -2,8 +2,9 @@
 # Claude Code hook: keep <workspace>/sessions/<session-id>.json up to date so the
 # Factree UI can show which sessions are working and which are waiting on you.
 # Wired to SessionStart, UserPromptSubmit, Stop, Notification and SessionEnd.
-# Does nothing unless a Factree workspace already exists for this folder.
-# Never prints, except one line on SessionStart when the Factree UI is running.
+# Does nothing unless a Factree workspace already exists for this folder, except on
+# SessionStart in a git repo with none: one line pointing feature work at /factree:spec.
+# Otherwise never prints, except one line on SessionStart when the Factree UI is running.
 
 . "$(cd "$(dirname "$0")" && pwd)/lib.sh"
 input=$(cat 2>/dev/null || true)
@@ -17,7 +18,12 @@ message=$(hook_field message)
 [ -z "$sid" ] && exit 0
 case "$sid" in *[!A-Za-z0-9_-]*) exit 0 ;; esac
 
-root=$(bash "$(dirname "$0")/root.sh" "$cwd") || exit 0   # no workspace: stay out of the way
+if ! root=$(bash "$(dirname "$0")/root.sh" "$cwd"); then   # no workspace: stay out of the way
+  if [ "$event" = "SessionStart" ] && git -C "$cwd" rev-parse --git-dir >/dev/null 2>&1; then
+    echo "Factree is installed: start feature or ticket work with /factree:spec, which specs it first, then plans, builds and verifies."
+  fi
+  exit 0
+fi
 
 case "$event" in
   SessionStart)     state="idle" ;;
