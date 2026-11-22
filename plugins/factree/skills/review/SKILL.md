@@ -40,7 +40,7 @@ Log `bash <plugin>/scripts/event.sh stage.step <spec-id> '{"stage":"review","ste
 
 **Then push and open, in merge order,** so each earlier number exists when a later one needs it:
 1. Push the pull request's head: `git -C <repo> push -u origin <head>`. Only `factree/` branches are pushed, and never the integration branch `factree/<work>` (it stays local).
-2. If a `review.opened` for this work already names this pull request and it's still open (`gh -R <owner/repo> pr view <n> --json state`), the push updates it: say so, don't open another (R1.S3), and log `review.restacked` with the new `sha`, so later leases use it.
+2. If a `review.opened` for this work already names this pull request and it's still open (`gh -R <owner/repo> pr view <n> --json state`), the push updates it: say so, don't open another (R1.S3), and push by the rule in step 8, so the new sha is recorded.
 3. Otherwise write the description to a file and run `gh pr create -R <owner/repo> --head <head> --base <base> --title "<spec title>: <tasks>" --body-file <file>`. The `base` is from the list: the repo's base branch, or the head of the pull request it's stacked on.
 4. Log `review.opened` on the work id with `{"pr","url","repo","tasks":["T1"],"base","after","sha"}`; `sha` is `git -C <repo> rev-parse <head>`, the commit just pushed. `after` maps each of the line's `after` entries to `repo#number`: a head branch to its pull request in the same repo, `repo#T1+T2` to the numbers of the pull requests holding those tasks.
 
@@ -113,7 +113,7 @@ Say how you sorted each, in one line apiece.
   2. A fresh reviewer, named `Review <work> T<n>`, checks that task's diff (the build skill's task review). Fix what it finds.
   3. Run that repo's full suite (the profile's command). If it fails, push nothing and bring the failure to the user (R5.S2).
   4. Merge the fix into the integration branch `factree/<work>` too (local only, never pushed), so it carries the fix.
-  5. Before pushing, capture `<old base tip>`: the last `sha` recorded for this `<head>` in `review.opened` or `review.restacked`. Push the task branch (`git -C <repo> push origin <head>`), then log `review.restacked` with the new `sha`. Restack each pull request stacked on it (step 8), passing that captured `<old base tip>`: logging the new sha has already replaced it in the events.
+  5. Push the task branch by the rule in step 8 (a plain push, since it only adds a commit), which also restacks each pull request stacked on it.
   6. Reply on the comment with the commit (`gh api repos/<owner/repo>/pulls/<n>/comments/<id>/replies -f body="Fixed in <sha>: <one line>"`, or `gh pr comment -R <owner/repo>` for a conversation comment) and log `review.reply` with `{"pr","repo","comment":"<id>","kind":"fixed","commit":"<sha>"}`.
 - **Behaviour change** (R6): run `/factree:spec` with the comment as the requirement and the pull request as its source. The flow plans and builds the change; then push each task branch the change touches, restack, and reply as above with `"kind":"spec"`.
 - **Doesn't hold** (R7): draft a short reply with your reasoning and the line that shows it. Ask it as a decision: log `question.asked` on the spec with `{"n","text":"Reply to <author> on <path>:<line>?","why":"<your reasoning>","proposal":"Post: <the reply>","options":["Change the code instead — treat it as a code change"]}`, and wait as for any decision. Post it only on the user's yes, then log `review.reply` with `"repo"` and `"kind":"disagree"`.
@@ -130,24 +130,30 @@ Repos differ in how a branch catches up with its base, so find this repo's way b
 5. **Otherwise ask once,** as a decision with a recommendation (merge, which keeps reviewers' comments attached and needs no force-push), and save the answer as `update_branch` so it isn't asked again (R10.S4).
 
 Then:
-- **Update the branch** from the base: `git merge origin/<base>`, or for rebase `git rebase origin/<base>` and later `git push --force-with-lease=<head>:<last pushed sha>`, then log `review.restacked` with the new `sha`. Update only the pull request's own task branch, never `factree/<work>`. Never force-push otherwise, and never without lease (R10.S3).
+- **Update the branch** from the base: `git merge origin/<base>`, or for rebase `git rebase origin/<base>` and later push it by the rule in step 8, which also restacks the pull requests stacked on it. Update only the pull request's own task branch, never `factree/<work>`. Never force-push otherwise, and never without lease (R10.S3).
 - **Resolve each conflict.** Follow any rule the repo's docs give. Where both sides add separate things, keep both. Where the base and the branch change the same behaviour differently (the same rule, value or text to different ends), or you aren't sure what either side meant, stop: push nothing, and bring the user both versions and your recommendation as one decision (R10.S6).
 - **Prove it** before pushing: run the build and the project's full test suite from the repo profile. If anything fails, push nothing and bring the failure to the user (R10.S6).
 - **Push the task branch, then say so on the pull request** in one comment: what conflicted and how it was resolved, and the checks that passed (R10.S5).
 
 Then start the wait again (step 4). It logs the pull request as mergeable once GitHub agrees.
 
-### 8. Restack after a merge or a fix (multi-repo R7, R8.S2, D5)
+### 8. Push a task branch, restack what's stacked on it (multi-repo R7, R8.S2, D5)
 
-A pull request stacked on another carries the other's commits. A squash merge rewrites them, so the stack must be cleaned. Do this when a pull request merges (step 4) or when a fix lands on a task branch (step 6), for each open pull request stacked on it, nearest first, in the same repo only. Only `factree/` branches Factree created are rebased or pushed, never `factree/<work>`.
+A pull request stacked on another carries the other's commits, and a squash merge or a fix changes them. One rule covers every place that pushes a task head (a first update push, a fix, a branch update, a restack) and every merge. Only `factree/` branches Factree created are rebased or pushed, never `factree/<work>`.
 
-1. `git -C <repo> fetch origin`. Take two shas. `<last pushed sha>` is the last `sha` recorded for `<head>` in `review.opened` or `review.restacked`: the lease below. `<old base tip>` is what the base's head was before the change: after a fix, the value captured in step 6 before the fix was pushed (the events already hold the new sha); after a merge, the last `sha` recorded for the merged pull request's head.
-2. In a worktree of `<head>`: `git rebase --onto origin/<base> <old base tip> <head>`. `<base>` is the repo's base branch after a merge, or the fixed branch if it's still open. The merged commits drop out.
-3. A conflict: resolve it as in step 7, or stop and ask.
-4. Run that repo's full suite. If it fails, push nothing and bring the failure to the user.
-5. Push with `git -C <repo> push --force-with-lease=<head>:<last pushed sha> origin <head>`. If it's refused, someone else pushed to that branch (R7.S2): stop, overwrite nothing, tell the user what's on the remote, and ask what to do.
-6. After a merge, retarget it: `gh pr edit <n> -R <owner/repo> --base <base>`. Its diff then shows only its own change (R7.S1).
-7. Log `review.restacked` on the work id with `{"pr","repo","task","base","sha"}`, `sha` being the pushed head, then restack the pull requests stacked on this one the same way.
+**Before any push that rewrites or advances a task branch,** capture `<previous tip>`: the last `sha` recorded for that head in `review.opened` or `review.restacked`. Then:
+1. Push it: a plain push when it only adds commits, otherwise `git -C <repo> push --force-with-lease=<head>:<last pushed sha> origin <head>`, where `<last pushed sha>` is that same last recorded sha. If the lease is refused, someone else pushed to that branch (R7.S2): stop, overwrite nothing, tell the user what's on the remote, and ask what to do.
+2. Log `review.restacked` on the work id with `{"pr","repo","task","base","sha"}`, `sha` being the pushed head.
+3. Restack each open pull request stacked directly on this head, in the same repo, with `<old base tip>` = the captured `<previous tip>` (the events now hold the new sha, so use the captured value). Apply this whole rule to it in turn, so in a chain T1 <- T3 <- T4, T3 is restacked with T1's previous tip, then T4 with T3's previous tip, captured before T3's own log.
+
+**After a merge** (step 4), `<previous tip>` of the merged head is its last recorded `sha`; restack each pull request stacked on it as in 3, with `<base>` the repo's base branch.
+
+**To restack one pull request:**
+1. `git -C <repo> fetch origin`. In a worktree of its `<head>`: `git rebase --onto origin/<base> <old base tip> <head>`. `<base>` is the repo's base branch after a merge, or the pushed branch while it's still open. The merged commits drop out.
+2. A conflict: resolve it as in step 7, or stop and ask.
+3. Run that repo's full suite. If it fails, push nothing and bring the failure to the user.
+4. Push it by the rule above (a force-push with the lease).
+5. After a merge, retarget it: `gh pr edit <n> -R <owner/repo> --base <base>`. Its diff then shows only its own change (R7.S1).
 
 **Evidence with every claim** (verifying R3): say work is pushed or fixed only right after running the command that shows it, and quote it ("git push: factree/012-review-T2 -> factree/012-review-T2", "npm test: 221 passed").
 
@@ -165,6 +171,6 @@ Run `bash <plugin>/scripts/link.sh <spec-id> <work>` when the pull request opens
 | "It's a one-line fix, I'll push it straight away" | Every push runs the full test suite first. A reviewer must never see code Factree hasn't built and tested. |
 | "The reviewer wants new behaviour, I'll add it to the fix" | Behaviour changes go through the spec. Run /factree:spec. |
 | "They're wrong, I'll reply and move on" | A reply that disagrees speaks for the user. Ask first. |
-| "I'll force-push the rebase" | Only with `--force-with-lease=<head>:<last pushed sha>`, and only a `factree/` task branch. A refusal means someone else pushed: ask. |
+| "I'll force-push the rebase" | Only with `--force-with-lease=<head>:<last pushed sha>` (step 8), and only a `factree/` task branch. A refusal means someone else pushed: ask. |
 | "It's approved, I'll merge it" | Never. Merging is the reviewers' and the user's. |
 | "gh isn't there, I'll push with git and open it later" | No gh, no push. Say how to install it and stop. |
