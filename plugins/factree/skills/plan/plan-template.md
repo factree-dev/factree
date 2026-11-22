@@ -10,7 +10,7 @@ design_approved_by:
 design_approved_at:
 approved_by:
 approved_at:
-branch:
+branch:                     # the integration branch, factree/<work>; made in every repo the plan touches
 created: <YYYY-MM-DD>
 ---
 # Plan: <spec title>

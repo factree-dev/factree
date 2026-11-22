@@ -156,6 +156,8 @@ Split only where a reviewer could reject one task and approve the other (plannin
 
 **Vertical slices.** Build one behaviour end to end before the next, so the feature works from the first task and grows. A slice usually spans verticals: the backend task that adds an endpoint and the frontend task that uses it deliver one behaviour together, numbered next to each other. Add a foundation task first only when several slices genuinely share it (a migration, a shared component), and say which tasks rely on it. Tasks that change one file are cut along its seams (a module, or named functions or routes in **Files**), unless they share an interface or lines; a one-chain plan warns. When two tasks change the same file, each task's **Files** names its region, e.g. `src/app.js (export route)`, so the build can run them together.
 
+**Repos.** In a workspace with several repos (`repos.md`), each task's **Files** start with its repo folder (`backend/src/app.js`), and a task stays in one repo; cut work that spans repos into one task per repo, the later one depending on the earlier. A new repo folder is added first with `bash <plugin>/scripts/repos.sh add <folder>`.
+
 **Each task has:** `### T<n>: <title>`, `**Proves:**` (scenario IDs as `<spec>#R<n>.S<n>`, or `none` for a foundation task with the reason), `**Depends on:**` (earlier tasks only, each with its reason: `T1 (the model it reads)`; none that only follows the order, so the build can run independent tasks at once), `**Est. diff:**`, **Files** (create or modify, with paths and where), **Interfaces** (consumes, produces, with exact signatures), and **Steps**.
 
 **Steps are test-first, each with a command and the result to expect:**
