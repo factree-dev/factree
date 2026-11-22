@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Claude Code PreToolUse hook on Agent|Task: log an agent.started event for Factree's own subagents,
-# named "Build <work> T<n>" or "Review <work> T<n>" (parallel-build R7). The review gate in task-done.sh
+# named "Build <work> T<n>", "Review <work> T<n>" or "Review <work> branch" (parallel-build R7, build-visibility R5). The review gate in task-done.sh
 # needs this event, which comes from the harness rather than from the model.
 # Does nothing, silently, for any other subagent or when no Factree workspace exists. Always exits 0.
 
@@ -12,10 +12,10 @@ model=$(printf '%s' "$input" | sed -n 's/.*"model"[[:space:]]*:[[:space:]]*"\([A
 cwd=$(printf '%s' "$input" | sed -n 's/.*"cwd"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1)
 [ -z "$cwd" ] && cwd="$PWD"
 
-printf '%s' "$desc" | grep -qE '^(Build|Review) [A-Za-z0-9_.-]+ T[0-9]+' || exit 0
+printf '%s' "$desc" | grep -qE '^((Build|Review) [A-Za-z0-9_.-]+ T[0-9]+|Review [A-Za-z0-9_.-]+ branch$)' || exit 0
 case "$desc" in Build*) role=build ;; *) role=review ;; esac
 work=$(printf '%s' "$desc" | awk '{print $2}')
-task=$(printf '%s' "$desc" | awk '{print $3}' | sed 's/^\(T[0-9]*\).*/\1/')
+task=$(printf '%s' "$desc" | awk '{print $3}' | sed 's/^\(T[0-9]*\).*/\1/')   # "branch" for the whole-branch reviewer
 
 root=$(cd "$cwd" 2>/dev/null && bash "$here/root.sh" 2>/dev/null) || exit 0
 [ -d "$root" ] || exit 0
