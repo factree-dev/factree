@@ -42,7 +42,7 @@ A task is **ready** when every task it depends on is done. Start ready tasks, **
 
 **Name a model for every subagent** (building R6), never leaving it to inherit yours: the cheapest model for a task whose steps give its exact tests and signatures in one or two files; a standard model for a task across several files or needing judgment, and for reviews; a more capable model for the last round of a fix loop.
 
-**Never build a task yourself while a subagent tool exists**, however small or sequential the plan. Without one (or without worktrees), say "No subagents here: building tasks one at a time.", then build and review each task yourself in order, in the working folder on the plan branch, following the same task prompt. The closing message says the reviews weren't fresh.
+**Never build a task yourself while a subagent tool exists**, however small or sequential the plan. Without one (or without worktrees), say "No subagents here: building tasks one at a time." before the first task, then build and review each task yourself in order, in the working folder on the plan branch, following the same task prompt. The closing message says the reviews weren't fresh.
 
 ### 4. Land each task as it returns
 
