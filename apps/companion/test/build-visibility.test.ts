@@ -100,6 +100,12 @@ describe("activity names the task", () => {
     log([ev(5, "stage.step", { stage: "build" }), ev(4, "agent.started", { role: "build", task: "T3", model: "m" }), ev(3, "agent.started", { role: "build", task: "T4", model: "m" }), ev(2, "agent.started", { role: "review", task: "T3", model: "m" })]);
     expect(activityText(state().activity!)).toBe("Building… T4 · Reviewing T3");
   });
+  it("a fix round's builder reads Building again", () => {
+    log([ev(6, "stage.step", { stage: "build" }), ev(5, "agent.started", { role: "build", task: "T3", model: "m" }), ev(4, "agent.started", { role: "review", task: "T3", model: "m" }),
+      ev(3, "task.fixing", { task: "T3", round: 1, cause: "spec" }), ev(2, "agent.started", { role: "build", task: "T3", model: "m" })]);
+    expect(activityText(state().activity!)).toBe("Building… T3");
+    expect(plan().build.T3).toMatchObject({ phase: "building" });
+  });
   it("Probing the branch [build-visibility#R4.S2]", () => {
     log([...doneAll, probing]);
     expect(activityText(state().activity!)).toBe("Probing the branch…");
