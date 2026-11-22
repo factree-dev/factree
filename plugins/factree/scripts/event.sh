@@ -5,7 +5,7 @@
 # Example: event.sh spec.approved link-report '{"by":"John Doe"}'
 # Inside Claude Code, the event also records the session (CLAUDE_CODE_SESSION_ID).
 
-types="spec.created spec.updated spec.approved spec.step question.asked question.answered question.opened question.resolved decision.recorded plan.created plan.design_approved plan.approved plan.implemented task.started task.done task.failed task.blocked spec.verified decision.feedback task.reviewed bug.escaped lesson.proposed lesson.approved lesson.rejected review.opened review.comment review.state review.reply stage.step agent.started"
+types="spec.created spec.updated spec.approved spec.step question.asked question.answered question.opened question.resolved decision.recorded plan.created plan.design_approved plan.approved plan.implemented task.started task.done task.failed task.blocked spec.verified decision.feedback task.reviewed bug.escaped lesson.proposed lesson.approved lesson.rejected review.opened review.comment review.state review.reply stage.step agent.started task.waiting"
 
 type="$1"; subject="$2"; data="${3:-}"
 [ -z "$data" ] && data='{}'

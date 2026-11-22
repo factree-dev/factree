@@ -459,6 +459,9 @@ check "a review event without a reviewer subagent exits 3 [parallel-build#R5.S6]
 rm -rf "$tmp"
 
 echo "# agent hook"
+tmp=$(mktemp -d); FACTREE_HOME="$tmp/.factree" bash $EVENT task.waiting 059-x '{"task":"T2","reason":"shares lines with T3"}' 2>/dev/null
+check "event.sh accepts task.waiting [parallel-build#R4.S3]" 'grep -q "\"type\":\"task.waiting\",\"work\":\"059-x\"" "$tmp/.factree/events.jsonl"'
+rm -rf "$tmp"
 AH="$(pwd)/$P/scripts/agent-hook.sh"
 tmp=$(mktemp -d); mkdir -p "$tmp/.factree"
 ah() { printf "{\"session_id\":\"s1\",\"hook_event_name\":\"PreToolUse\",\"cwd\":\"$1\",\"tool_name\":\"Agent\",\"tool_input\":{\"description\":\"$2\",\"prompt\":\"do it\",\"subagent_type\":\"general-purpose\",\"model\":\"sonnet\"}}" | bash "$AH"; }
