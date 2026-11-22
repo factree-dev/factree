@@ -50,6 +50,7 @@ spec="${2:-$work/../../specs/$spec_id.md}"
 [ -n "$spec_id" ] || { echo "ERROR $head:1: front matter has no spec:"; exit 1; }
 [ -f "$spec" ] || { echo "ERROR $head:1: spec file not found: $spec"; exit 1; }
 
+while IFS= read -r line; do [ -n "$line" ] && note "ERROR $head:1: $line"; done < <(bash "$(dirname "$0")/../../../scripts/plan-repos.sh" "$work" 2>&1 >/dev/null)
 budget=$(fmval "$head" review_budget); budget=$(( ${budget:-0} + 0 ))
 scope_list=$(fmval "$head" scope | tr -d '[] ')
 nvert=$(echo $verticals | wc -w | tr -d ' ')

@@ -651,4 +651,25 @@ check "the longest repo wins for a nested repo [multi-repo#R1]" '[ "$(of a/inner
 check "add refuses a folder outside the workspace's folder [multi-repo#R1]" '! grep -q out "$co/.factree/repos.md"'
 rm -rf "$tmp" "$tmp-link"
 
+echo "# one repo per task"
+PREPOS="$(pwd)/$P/scripts/plan-repos.sh"
+tmp=$(mktemp -d); tmp=$(cd "$tmp" && pwd -P); bash "$MAKE" "$tmp/ws"; mkdir -p "$tmp/ws/.factree/work" "$tmp/ws/.factree/specs"
+cp -R tests/validate-plan/verticals/plan "$tmp/ws/.factree/work/007-widget-export"; cp tests/validate-plan/verticals/widget-export.md "$tmp/ws/.factree/specs/"
+W="$tmp/ws/.factree/work/007-widget-export"; printf 'frontend\nbackend\ninfra\n' > "$tmp/ws/.factree/repos.md"
+sed -i.bak 's#`src/x.ts`#`backend/src/x.ts`#' "$W/backend/tasks.md"; sed -i.bak 's#`src/x.ts`#`frontend/src/x.ts` (the page)#' "$W/frontend/tasks.md"; rm -f "$W"/*/*.bak
+out=$(bash "$PREPOS" "$W" 2>&1); code=$?
+check "a task in one repo has that repo [multi-repo#R2.S1]" 'echo "$out" | grep -q "^T1	backend$" && echo "$out" | grep -q "^T2	frontend$"'
+check "a clean multi-repo plan passes" '[ $code -eq 0 ] && bash $PLANV "$W" 2>&1 | grep -q "0 error(s)"'
+sed -i.bak 's#`backend/src/x.ts`#`backend/src/x.ts`, `frontend/y.ts`#' "$W/backend/tasks.md"; rm -f "$W"/*/*.bak
+out=$(bash "$PREPOS" "$W" 2>&1 >/dev/null); code=$?
+check "a task spanning two repos is an error naming both [multi-repo#R2.S2]" '[ $code -eq 1 ] && echo "$out" | grep -q "^T3 spans repos backend, frontend$" && bash $PLANV "$W" 2>&1 | grep -q "^ERROR .*T3 spans repos backend, frontend"'
+sed -i.bak 's#`frontend/src/x.ts`#`docs/notes.md`#' "$W/frontend/tasks.md"; rm -f "$W"/*/*.bak
+out=$(bash "$PREPOS" "$W" 2>&1 >/dev/null)
+check "a file outside every repo is an error [multi-repo#R2.S4]" 'echo "$out" | grep -q "^T2: docs/notes.md is in no repo$"'
+rm "$tmp/ws/.factree/repos.md"
+out=$(bash "$PREPOS" "$W" 2>&1); code=$?
+check "a single-repo workspace's tasks pass [multi-repo#R2.S3]" '[ $code -eq 0 ] && [ "$(echo "$out" | grep -c "	\.$")" -eq 3 ]'
+check "validate-plan.sh stays under 300 lines [multi-repo#R2]" '[ $(wc -l < $PLANV) -lt 300 ]'
+rm -rf "$tmp"
+
 exit $fail
