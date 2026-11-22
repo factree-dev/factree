@@ -358,6 +358,7 @@ check "a non-GitHub remote stops the follower with one line" 'grep -q "^review: 
 rm -rf "$tmp"
 
 echo "# review catch-up, several repos"
+CU="$(pwd)/$P/scripts/review-catchup.sh"
 tmp=$(mktemp -d); mkdir -p "$tmp/ws/.factree" "$tmp/bin"; : > "$tmp/ws/.factree/events.jsonl"
 for r in backend frontend infra; do mkdir -p "$tmp/ws/$r"; git -C "$tmp/ws/$r" init -q; done
 git -C "$tmp/ws/backend" remote add origin https://github.com/acme/backend.git
