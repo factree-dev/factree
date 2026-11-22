@@ -1178,34 +1178,60 @@ function brief(plans, events = []) {
 		...p.branchReview ? { branchReview: p.branchReview } : {}
 	};
 }
-/** The plan's newest pull request: state and comments with how each was handled (review R8). */
+/** The plan's pull requests, keyed by repo and number (multi-repo R9): state and comments with how each was handled
+*  (review R8). No repo means the workspace's only repo. The top-level fields are the newest pull request's. */
 function reviewOf(work, events) {
 	const mine = events.filter((e) => e.work === work && e.type.startsWith("review."));
-	const opened = [...mine].reverse().find((e) => e.type === "review.opened");
-	if (!opened) return null;
-	const pr = String(opened.data.pr ?? "");
-	const ofPr = mine.filter((e) => String(e.data.pr ?? "") === pr);
-	const state = [...ofPr].reverse().find((e) => e.type === "review.state")?.data.state;
-	const replies = /* @__PURE__ */ new Map();
-	for (const e of ofPr) if (e.type === "review.reply") replies.set(String(e.data.comment ?? ""), e);
-	const handled = (id) => {
-		const r = replies.get(id);
-		if (!r) return null;
-		if (r.data.kind === "fixed") return `fixed in ${String(r.data.commit ?? "")}`;
-		if (r.data.kind === "spec") return `changed in the spec${r.data.commit ? `, ${String(r.data.commit)}` : ""}`;
-		return "replied";
-	};
-	const comments = ofPr.filter((e) => e.type === "review.comment").map((e) => ({
-		author: String(e.data.author ?? ""),
-		path: String(e.data.path ?? ""),
-		line: String(e.data.line ?? ""),
-		body: String(e.data.body ?? ""),
-		handled: handled(String(e.data.id ?? ""))
-	}));
+	const key = (e) => `${String(e.data.repo ?? "")}#${String(e.data.pr ?? "")}`;
+	const order = [];
+	for (const e of mine) if (e.type === "review.opened") {
+		const k = key(e);
+		const i = order.indexOf(k);
+		if (i >= 0) order.splice(i, 1);
+		order.push(k);
+	}
+	if (!order.length) return null;
+	const prs = order.map((k) => {
+		const ofPr = mine.filter((e) => key(e) === k);
+		const opened = [...ofPr].reverse().find((e) => e.type === "review.opened");
+		const state = [...ofPr].reverse().find((e) => e.type === "review.state")?.data.state;
+		const replies = /* @__PURE__ */ new Map();
+		for (const e of ofPr) if (e.type === "review.reply") replies.set(String(e.data.comment ?? ""), e);
+		const handled = (id) => {
+			const r = replies.get(id);
+			if (!r) return null;
+			if (r.data.kind === "fixed") return `fixed in ${String(r.data.commit ?? "")}`;
+			if (r.data.kind === "spec") return `changed in the spec${r.data.commit ? `, ${String(r.data.commit)}` : ""}`;
+			return "replied";
+		};
+		const comments = ofPr.filter((e) => e.type === "review.comment").map((e) => ({
+			author: String(e.data.author ?? ""),
+			path: String(e.data.path ?? ""),
+			line: String(e.data.line ?? ""),
+			body: String(e.data.body ?? ""),
+			handled: handled(String(e.data.id ?? ""))
+		}));
+		const t = opened.data.tasks;
+		const tasks = Array.isArray(t) ? t.map(String) : t ? String(t).split(/[,\s]+/).filter(Boolean) : [];
+		const af = opened.data.after;
+		const after = Array.isArray(af) ? af.map(String) : af ? String(af).split(/[,\s]+/).filter(Boolean) : [];
+		return {
+			repo: String(opened.data.repo ?? ""),
+			number: String(opened.data.pr ?? ""),
+			url: String(opened.data.url ?? ""),
+			base: String(opened.data.base ?? ""),
+			tasks,
+			after,
+			state: String(state ?? "OPEN"),
+			comments
+		};
+	});
+	const last = prs[prs.length - 1];
 	return {
-		url: String(opened.data.url ?? ""),
-		state: String(state ?? "OPEN"),
-		comments
+		url: last.url,
+		state: last.state,
+		comments: last.comments,
+		prs
 	};
 }
 /** Stale stages and the round (spec-ring R4). A stage after Spec is stale when it last finished before the latest spec
