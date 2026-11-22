@@ -91,6 +91,31 @@ sed -i.bak "s/^status: approved$/status: draft/" "$tmp/plan/plan.md"; rm "$tmp/p
 out=$(bash $PLANV "$tmp/plan" "$tmp/spec.md"); code=$?
 check "draft plan of a draft spec only warns (compact path) [decision-flow#R5.S1]" '[ $code -eq 0 ] && echo "$out" | grep -q "approve it with the plan"'
 rm -rf "$tmp"
+# A plan whose backend tasks are T1..N, T<k> depending on <dep>(s) given by the function's callers; frontend has none.
+mkdep() { # $1 plan dir, then one "Depends on" value per task from T1
+  d=$1; shift; f=$d/backend/tasks.md; head -4 $VP/plan/backend/tasks.md > $f; printf '# Tasks\n' >> $f
+  printf -- '---\nwork: 007-widget-export\nvertical: frontend\n---\n# Tasks\n' > $d/frontend/tasks.md
+  n=0; for dep in "$@"; do n=$((n + 1))
+    printf '\n### T%s: Task %s\n\n**Proves:** none (test)\n**Depends on:** %s\n**Est. diff:** ~10 lines\n\n**Files**\n- Create: `src/x.ts`\n\n**Steps**\n- [ ] 1. Write failing tests: `works [widget-export#R2.S1]`\n- [ ] 2. Commit\n' $n $n "$dep" >> $f
+  done; }
+tmp=$(mktemp -d); cp -R $VP/plan "$tmp/plan"
+mkdep "$tmp/plan" none "T1 (the model it reads)" "T2 (b, c)" "T1 (), T2 (uses parse from T2), T3" T4
+out=$(bash $PLANV "$tmp/plan" $VP/widget-export.md)
+check "a reasoned dependency gets no warning [parallel-build#R1.S1]" '! echo "$out" | grep -q "T2: dependency" && ! echo "$out" | grep -q "T3: dependency"'
+check "a bare dependency warns with task and line [parallel-build#R1.S2]" 'echo "$out" | grep -q "backend/tasks.md:[0-9]*: T5: dependency on T4 has no reason"'
+check "empty and partial reasons warn per dependency [parallel-build#R1.S4]" '[ $(echo "$out" | grep -c "T4: dependency") -eq 2 ] && echo "$out" | grep -q "T4: dependency on T1 has no reason" && echo "$out" | grep -q "T4: dependency on T3 has no reason"'
+mkdep "$tmp/plan" none T1 T2 T3 T4 T5 T6
+out=$(bash $PLANV "$tmp/plan" $VP/widget-export.md)
+check "a 7-task bare chain warns once [parallel-build#R2.S1]" '[ $(echo "$out" | grep -c "plan is one chain: no tasks can run at once") -eq 1 ]'
+mkdep "$tmp/plan" none "T1 (a)" "T2 (b)" "T3 (c)"
+out=$(bash $PLANV "$tmp/plan" $VP/widget-export.md)
+check "a reasoned 4-chain doesn't [parallel-build#R2.S2]" '! echo "$out" | grep -q "one chain"'
+mkdep "$tmp/plan" none T1 T2
+out=$(bash $PLANV "$tmp/plan" $VP/widget-export.md)
+check "a 3-chain doesn't [parallel-build#R2.S3]" '! echo "$out" | grep -q "one chain"'
+rm -rf "$tmp"
+out=$(bash $PLANV tests/validate-plan/verticals-bad $VP/widget-export.md); code=$?
+check "older plans warn but don't error [parallel-build#R1.S3]" '[ $code -eq 1 ] && echo "$out" | grep -q "has no reason" && ! echo "$out" | grep "has no reason" | grep -q ERROR'
 rm -rf "$tmp"
 
 echo "# detect"

@@ -74,7 +74,7 @@ T3 and T4 both depend only on T2, so they can be done in parallel.
 ### T2: Active link rows with spec columns
 
 **Proves:** link-report#R2.S1, link-report#R3.S1, link-report#R3.S2, link-report#R3.S3
-**Depends on:** T1
+**Depends on:** T1 (the report route it extends)
 **Est. diff:** ~190 lines (row mapper 30, streaming 45, tests 115)
 
 **Files**
@@ -111,7 +111,7 @@ T3 and T4 both depend only on T2, so they can be done in parallel.
 ### T3: Consistent snapshot and disconnect handling
 
 **Proves:** link-report#R2.S3
-**Depends on:** T2
+**Depends on:** T2 (the row mapper it reuses)
 **Est. diff:** ~110 lines (handler 30, tests 80)
 
 **Files**
@@ -141,7 +141,7 @@ T3 and T4 both depend only on T2, so they can be done in parallel.
 ### T4: Performance check at 100k rows
 
 **Proves:** link-report#R4.S1
-**Depends on:** T2
+**Depends on:** T2 (the row mapper it reuses)
 **Est. diff:** ~120 lines (perf test 90, seed helper 30)
 
 **Files**
