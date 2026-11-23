@@ -331,6 +331,67 @@ touch "$tmp/bin/fail"; wr
 check "wait stops when gh fails" 'grep -q "^review: gh failed: gh: authentication required$" "$tmp/out"'
 rm -rf "$tmp"
 
+echo "# review, several repos"
+tmp=$(mktemp -d); mkdir -p "$tmp/ws/.factree" "$tmp/bin"; : > "$tmp/ws/.factree/events.jsonl"
+for r in backend frontend; do mkdir -p "$tmp/ws/$r"; git -C "$tmp/ws/$r" init -q; done
+git -C "$tmp/ws/backend" remote add origin https://github.com/acme/backend.git
+git -C "$tmp/ws/frontend" remote add origin git@github.com:acme/frontend.git
+# A fake gh that answers per -R (pr view) or per repos/acme/<repo> (api), from state-<repo> and comments-<repo> files.
+cat > "$tmp/bin/gh" <<'GH'
+#!/usr/bin/env bash
+d="$(dirname "$0")"; r=""
+if [ "$1" = pr ]; then while [ $# -gt 0 ]; do [ "$1" = -R ] && r=${2#acme/}; shift; done; cat "$d/state-$r"
+else r=${2#repos/acme/}; r=${r%%/*}; case "$2" in */pulls/*) cat "$d/comments-$r" ;; esac; fi
+GH
+chmod +x "$tmp/bin/gh"
+for r in backend frontend; do printf 'OPEN MERGEABLE REVIEW_REQUIRED\n' > "$tmp/bin/state-$r"; : > "$tmp/bin/comments-$r"
+  (cd "$tmp/ws/$r" && bash $EVENT review.opened 062-x "{\"pr\":\"7\",\"url\":\"u\",\"repo\":\"$r\",\"tasks\":\"T1\",\"base\":\"main\"}"); done
+wm() { (cd "$tmp/ws/frontend" && PATH="$tmp/bin:$PATH" FACTREE_WAIT_EVERY=0.2 FACTREE_WAIT_FOR=1 bash "$WR" 062-x "$@" > "$tmp/out" 2>&1); }
+printf '201\037priya\037a.ts\0373\037fix this\n' > "$tmp/bin/comments-frontend"; wm frontend
+check "a comment on frontend #7 is logged for frontend, not backend #7 [multi-repo#R8.S3]" 'grep -q "\"type\":\"review.comment\".*\"id\":\"201\".*\"repo\":\"frontend\"" "$tmp/ws/.factree/events.jsonl" && ! grep "review.comment" "$tmp/ws/.factree/events.jsonl" | grep -q "\"repo\":\"backend\"" && grep -q "^review: comment by priya" "$tmp/out"'
+printf 'MERGED UNKNOWN \n' > "$tmp/bin/state-backend"; wm backend 7
+check "each repo's state is its own, logged with its repo" 'grep -q "\"type\":\"review.state\".*\"pr\":\"7\",\"state\":\"MERGED\",\"repo\":\"backend\"" "$tmp/ws/.factree/events.jsonl" && ! grep "review.state" "$tmp/ws/.factree/events.jsonl" | grep -q "\"repo\":\"frontend\""'
+wm
+check "two repos and no repo named: it says which to name" 'grep -q "^review: 062-x has pull requests in several repos (backend,frontend): name one" "$tmp/out" && [ $(wc -l < "$tmp/out") -eq 1 ]'
+for p in 12 13; do (cd "$tmp/ws/backend" && bash $EVENT review.opened 062-x "{\"pr\":\"$p\",\"url\":\"u\",\"repo\":\"backend\",\"tasks\":\"T$p\",\"base\":\"main\"}"); done
+printf 'OPEN MERGEABLE APPROVED\n' > "$tmp/bin/state-backend"; wm backend 12; wm backend 13
+check "two PRs in one repo reaching the same state are each logged [multi-repo#R8]" 'grep -q "\"type\":\"review.state\".*\"pr\":\"12\",\"state\":\"APPROVED\",\"repo\":\"backend\"" "$tmp/ws/.factree/events.jsonl" && grep -q "\"type\":\"review.state\".*\"pr\":\"13\",\"state\":\"APPROVED\",\"repo\":\"backend\"" "$tmp/ws/.factree/events.jsonl" && grep -q "^review: APPROVED$" "$tmp/out"'
+git -C "$tmp/ws/frontend" remote set-url origin https://gitlab.com/acme/frontend.git; wm frontend
+check "a non-GitHub remote stops the follower with one line" 'grep -q "^review: frontend.s origin is not a GitHub remote" "$tmp/out" && [ $(wc -l < "$tmp/out") -eq 1 ]'
+rm -rf "$tmp"
+
+echo "# review, one repo (repo .)"
+tmp=$(mktemp -d); mkdir -p "$tmp/r/.factree" "$tmp/bin"; : > "$tmp/r/.factree/events.jsonl"; git -C "$tmp/r" init -q
+git -C "$tmp/r" remote add origin https://github.com/acme/r.git
+printf '#!/usr/bin/env bash\n[ "$1" = pr ] && cat "$(dirname "$0")/state"; exit 0\n' > "$tmp/bin/gh"; chmod +x "$tmp/bin/gh"
+printf 'OPEN MERGEABLE APPROVED\n' > "$tmp/bin/state"
+(cd "$tmp/r" && bash $EVENT review.state 062-s '{"pr":"9","state":"APPROVED","repo":"x"}')
+for p in 12 13; do (cd "$tmp/r" && bash $EVENT review.opened 062-s "{\"pr\":\"$p\",\"url\":\"u\",\"repo\":\".\",\"base\":\"main\"}"); done
+for p in 12 13; do (cd "$tmp/r" && PATH="$tmp/bin:$PATH" bash "$WR" 062-s . "$p" --once >/dev/null 2>&1); done
+check "repo . : each PR's state is logged, and . is not a wildcard [multi-repo#R8]" '[ $(grep -c "\"type\":\"review.state\".*\"state\":\"APPROVED\",\"repo\":\"\.\"" "$tmp/r/.factree/events.jsonl") -eq 2 ]'
+rm -rf "$tmp"
+
+echo "# review catch-up, several repos"
+CU="$(pwd)/$P/scripts/review-catchup.sh"
+tmp=$(mktemp -d); mkdir -p "$tmp/ws/.factree" "$tmp/bin"; : > "$tmp/ws/.factree/events.jsonl"
+for r in backend frontend infra; do mkdir -p "$tmp/ws/$r"; git -C "$tmp/ws/$r" init -q; done
+git -C "$tmp/ws/backend" remote add origin https://github.com/acme/backend.git
+git -C "$tmp/ws/frontend" remote add origin git@github.com:acme/frontend.git
+git -C "$tmp/ws/infra" remote add origin ssh://git@github.com/acme/infra.git
+cat > "$tmp/bin/gh" <<'GH'
+#!/usr/bin/env bash
+echo "$*" >> "$(dirname "$0")/calls"; [ "$1" = pr ] && echo "OPEN MERGEABLE REVIEW_REQUIRED"; exit 0
+GH
+chmod +x "$tmp/bin/gh"
+for r in backend frontend; do (cd "$tmp/ws/$r" && bash $EVENT review.opened 062-x "{\"pr\":\"7\",\"url\":\"u\",\"repo\":\"$r\",\"base\":\"main\"}"); done
+(cd "$tmp/ws/backend" && bash $EVENT review.state 062-x '{"pr":"7","state":"MERGED","repo":"backend"}')
+(cd "$tmp/ws/frontend" && PATH="$tmp/bin:/usr/bin:/bin" bash "$CU" >/dev/null 2>&1)
+check "catch-up skips the merged #7 in backend and still checks frontend's #7 [multi-repo#R8.S3]" '! grep -q "acme/backend" "$tmp/bin/calls" && grep -q "^pr view 7 -R acme/frontend" "$tmp/bin/calls"'
+(cd "$tmp/ws/infra" && bash $EVENT review.opened 062-y '{"pr":"3","url":"u","repo":"infra","base":"main"}')
+: > "$tmp/bin/calls"; (cd "$tmp/ws/infra" && PATH="$tmp/bin:/usr/bin:/bin" bash "$WR" 062-y infra --once >/dev/null 2>&1)
+check "an ssh:// origin parses to acme/infra" 'grep -q "^pr view 3 -R acme/infra" "$tmp/bin/calls"'
+rm -rf "$tmp"
+
 echo "# review catch-up"
 CU="$(pwd)/$P/scripts/review-catchup.sh"
 tmp=$(mktemp -d); mkdir -p "$tmp/ws/.factree" "$tmp/ws/repo" "$tmp/bin" "$tmp/nogh"; : > "$tmp/ws/.factree/events.jsonl"
@@ -459,6 +520,19 @@ check "a branch reviewer doesn't satisfy a task's gate [build-visibility#R5.S1]"
 rtmp; rv "$tmp" T2 pass; out=$(tdr)
 check "a review event without a reviewer subagent exits 3 [parallel-build#R5.S6]" 'echo "$out" | grep -q "^T2 has no reviewer subagent$" && echo "$out" | grep -q "rc=3" && t2open && ! grep -q task.done "$tmp/.factree/events.jsonl"'
 rm -rf "$tmp"
+# task.done records the task's repo [multi-repo#R3.S4]
+tmp=$(mktemp -d); tmp=$(cd "$tmp" && pwd -P); bash tests/fixtures/multi/make.sh "$tmp/ws"; mkdir -p "$tmp/ws/.factree/work"
+cp -R tests/validate-plan/verticals/plan "$tmp/ws/.factree/work/007-widget-export"; printf 'frontend\nbackend\ninfra\n' > "$tmp/ws/.factree/repos.md"
+M="$tmp/ws/.factree/work/007-widget-export"
+sed -i.bak 's#`src/x.ts`#`backend/src/x.ts`#' "$M/backend/tasks.md"; sed -i.bak 's#`src/x.ts`#`frontend/src/x.ts`#' "$M/frontend/tasks.md"; rm -f "$M"/*/*.bak
+FACTREE_HOME="$tmp/ws/.factree" bash $EVENT agent.started 007-widget-export '{"role":"review","task":"T2","model":"sonnet"}'
+FACTREE_HOME="$tmp/ws/.factree" bash $EVENT task.reviewed 007-widget-export '{"task":"T2","spec":"pass","quality":"pass"}'
+FACTREE_HOME="$tmp/ws/.factree" bash "$TD" 007-widget-export T2 abc1234 60 "npm test" >/dev/null
+check "task.done records the task's repo [multi-repo#R3.S4]" 'grep "\"type\":\"task.done\",\"work\":\"007-widget-export\"" "$tmp/ws/.factree/events.jsonl" | grep -q "\"task\":\"T2\",\"commit\":\"abc1234\",\"lines\":60,\"tests\":\"npm test\",\"repo\":\"frontend\""'
+rm -rf "$tmp"
+rtmp; rv "$tmp" T2 pass; rvs "$tmp" T2; FACTREE_HOME="$tmp/.factree" bash "$TD" 007-widget-export T2 abc1234 60 "npm test" >/dev/null
+check "a single-repo task records repo \".\" [multi-repo#R3.S4]" 'grep "\"type\":\"task.done\"" "$tmp/.factree/events.jsonl" | grep -q "\"tests\":\"npm test\",\"repo\":\"\\.\""'
+rm -rf "$tmp"
 
 echo "# agent hook"
 tmp=$(mktemp -d); FACTREE_HOME="$tmp/.factree" bash $EVENT task.waiting 059-x '{"task":"T2","reason":"shares lines with T3"}' 2>/dev/null
@@ -520,6 +594,8 @@ out=$(prompt)
 check "decisions made in the companion come with the next prompt [companion-decisions#R8.S4]" 'echo "$out" | grep -q "^Decided in the Factree companion since your last turn:$" && echo "$out" | grep -q "^- link-report question 3: Beside each scenario id (John Doe)$" && echo "$out" | grep -q "^- 016-verify changes requested: split T4 (John Doe)$" && echo "$out" | grep -q "^- version-check spec approved (John Doe (via companion))$" && ! echo "$out" | grep -q "old answer\|in chat"'
 out=$(prompt)
 check "nothing new, nothing added [companion-decisions#R8.S5]" '[ -z "$out" ]'
+(cd "$tmp/ws/repo" && bash $EVENT review.restacked 062-x '{"pr":"12","repo":"backend","task":"T3","base":"main","sha":"abc1234"}')
+check "event.sh accepts review.restacked on the work [multi-repo#R7]" 'grep -q "\"type\":\"review.restacked\",\"work\":\"062-x\"" "$tmp/ws/.factree/events.jsonl"'
 check "event.sh accepts decision.feedback" '(cd "$tmp/ws/repo" && bash $EVENT decision.feedback demo "{\"note\":\"x\"}" 2>/dev/null)'
 rm -rf "$tmp"
 
@@ -610,5 +686,109 @@ check "the README lists the commands, no How it works [readme#R2.S1]" '! grep -q
 
 echo "# verify paused"
 check "verify is not a skill, and is kept [verify-paused#R1.S1]" '[ ! -e $P/skills/verify ] && [ -f $P/paused/verify/SKILL.md ]'
+echo "# multi-repo"
+REPOS="$(pwd)/$P/scripts/repos.sh"; MAKE="$(pwd)/tests/fixtures/multi/make.sh"
+mtmp() { tmp=$(mktemp -d); tmp=$(cd "$tmp" && pwd -P); bash "$MAKE" "$tmp/company"; }
+mtmp; co="$tmp/company"; rm -rf "$co/origins"
+out=$(cd "$co" && env -u FACTREE_HOME bash "$INIT"); code=$?
+check "a folder holding three repos gets a workspace listing them [multi-repo#R1.S1]" '[ $code -eq 0 ] && [ "$(echo "$out" | tail -n1)" = "$co/.factree" ] && [ "$(sort "$co/.factree/repos.md" | tr "\n" " ")" = "backend frontend infra " ]'
+out=$(cd "$co/backend" && env -u FACTREE_HOME bash "$INIT"); code=$?
+check "a command inside a repo finds the workspace above [multi-repo#R1.S3]" '[ $code -eq 0 ] && [ "$out" = "$co/.factree" ] && [ ! -d "$co/backend/.factree" ]'
+before=$(cat "$co/.factree/repos.md"); out=$(cd "$co" && bash "$REPOS" of backend/src/x.ts); code=$?
+check "repos.sh of finds the repo and never writes [multi-repo#R1]" '[ $code -eq 0 ] && [ "$out" = "backend" ] && [ "$(cat "$co/.factree/repos.md")" = "$before" ]'
+out=$(cd "$co" && bash "$REPOS" of docs/x.md); code=$?
+check "repos.sh of outside every repo exits 1 [multi-repo#R1]" '[ $code -eq 1 ] && [ -z "$out" ]'
+out=$(cd "$co" && bash "$REPOS" list)
+check "repos.sh list prints the repos" '[ "$(echo "$out" | wc -l | tr -d " ")" = 3 ]'
+git init -q "$co/mobile"; (cd "$co" && bash "$REPOS" add mobile; bash "$REPOS" add mobile)
+check "repos.sh add appends a newly cloned repo once [multi-repo#R1.S4]" '[ "$(grep -cx mobile "$co/.factree/repos.md")" = 1 ] && [ "$(wc -l < "$co/.factree/repos.md" | tr -d " ")" = 4 ]'
+mkdir "$co/notes"; (cd "$co" && bash "$REPOS" add notes 2>/dev/null)
+check "repos.sh add refuses a folder that is not a repo" '! grep -qx notes "$co/.factree/repos.md"'
+rm -rf "$tmp"
+tmp=$(mktemp -d); tmp=$(cd "$tmp" && pwd -P); mkdir -p "$tmp/a" "$tmp/b"
+out=$(cd "$tmp" && env -u FACTREE_HOME bash "$INIT" 2>&1); code=$?
+check "no repos anywhere creates nothing [multi-repo#R1.S2]" '[ $code -eq 3 ] && [ ! -d "$tmp/.factree" ] && echo "$out" | grep -q "/factree:init"'
+rm -rf "$tmp"
+fresh; (cd "$tmp/shop" && env -u FACTREE_HOME bash "$INIT" >/dev/null)
+check "a workspace inside one repo lists . [multi-repo#R1]" '[ "$(cat "$tmp/shop/.factree/repos.md")" = "." ] && [ "$(cd "$tmp/shop" && bash "$REPOS" of src/a.ts)" = "." ]'
+rm -rf "$tmp"
+mtmp; co="$tmp/company"; mkdir "$tmp/home"
+out=$(cd "$co" && FACTREE_HOME="$tmp/home" bash "$INIT")
+check "FACTREE_HOME still wins [multi-repo#R1]" '[ "$(echo "$out" | tail -n1)" = "$tmp/home" ] && [ ! -d "$co/.factree" ]'
+rm -rf "$tmp"
+tmp=$(mktemp -d); tmp=$(cd "$tmp" && pwd -P); ln -s "$tmp" "$tmp-link"; co="$tmp-link/co"; mkdir -p "$co/a" "$co/ab" "$co/a b"
+for r in a "a b"; do git init -q "$co/$r"; done
+(cd "$co" && env -u FACTREE_HOME bash "$INIT" >/dev/null; git init -q a/inner; bash "$REPOS" add a/inner)
+of() { (cd "$co" && bash "$REPOS" of "$1"); }
+check "a path in a folder not created yet, through a symlink, finds its repo [multi-repo#R1]" '[ "$(of "a b/new/dir/x.ts")" = "a b" ] && [ "$(of "$tmp/co/a/new/x.ts")" = "a" ]'
+check "a repo folder matches on a / boundary only [multi-repo#R1]" '! of ab/x.ts >/dev/null && [ "$(of a/x.ts)" = "a" ]'
+check "the longest repo wins for a nested repo [multi-repo#R1]" '[ "$(of a/inner/new/x.ts)" = "a/inner" ]'
+(cd "$co" && bash "$REPOS" add "$tmp/elsewhere" 2>/dev/null); mkdir "$tmp/out"; git init -q "$tmp/out"; (cd "$co" && bash "$REPOS" add "$tmp/out" 2>/dev/null); code=$?
+check "add refuses a folder outside the workspace's folder [multi-repo#R1]" '! grep -q out "$co/.factree/repos.md"'
+rm -rf "$tmp" "$tmp-link"
+
+echo "# one repo per task"
+PREPOS="$(pwd)/$P/scripts/plan-repos.sh"
+tmp=$(mktemp -d); tmp=$(cd "$tmp" && pwd -P); bash "$MAKE" "$tmp/ws"; mkdir -p "$tmp/ws/.factree/work" "$tmp/ws/.factree/specs"
+cp -R tests/validate-plan/verticals/plan "$tmp/ws/.factree/work/007-widget-export"; cp tests/validate-plan/verticals/widget-export.md "$tmp/ws/.factree/specs/"
+W="$tmp/ws/.factree/work/007-widget-export"; printf 'frontend\nbackend\ninfra\n' > "$tmp/ws/.factree/repos.md"
+sed -i.bak 's#`src/x.ts`#`backend/src/x.ts`#' "$W/backend/tasks.md"; sed -i.bak 's#`src/x.ts`#`frontend/src/x.ts` (the page)#' "$W/frontend/tasks.md"; rm -f "$W"/*/*.bak
+out=$(bash "$PREPOS" "$W" 2>&1); code=$?
+check "a task in one repo has that repo [multi-repo#R2.S1]" 'echo "$out" | grep -q "^T1	backend$" && echo "$out" | grep -q "^T2	frontend$"'
+check "a clean multi-repo plan passes" '[ $code -eq 0 ] && bash $PLANV "$W" 2>&1 | grep -q "0 error(s)"'
+sed -i.bak 's#`backend/src/x.ts`#`backend/src/x.ts`, `frontend/y.ts`#' "$W/backend/tasks.md"; rm -f "$W"/*/*.bak
+out=$(bash "$PREPOS" "$W" 2>&1 >/dev/null); code=$?
+check "a task spanning two repos is an error naming both [multi-repo#R2.S2]" '[ $code -eq 1 ] && echo "$out" | grep -q "^T3 spans repos backend, frontend$" && bash $PLANV "$W" 2>&1 | grep -q "^ERROR .*T3 spans repos backend, frontend"'
+sed -i.bak 's#`frontend/src/x.ts`#`docs/notes.md`#' "$W/frontend/tasks.md"; rm -f "$W"/*/*.bak
+out=$(bash "$PREPOS" "$W" 2>&1 >/dev/null)
+check "a file outside every repo is an error [multi-repo#R2.S4]" 'echo "$out" | grep -q "^T2: docs/notes.md is in no repo$"'
+rm "$tmp/ws/.factree/repos.md"
+out=$(bash "$PREPOS" "$W" 2>&1); code=$?
+check "a single-repo workspace's tasks pass [multi-repo#R2.S3]" '[ $code -eq 0 ] && [ "$(echo "$out" | grep -c "	\.$")" -eq 3 ]'
+check "validate-plan.sh stays under 300 lines [multi-repo#R2]" '[ $(wc -l < $PLANV) -lt 300 ]'
+rm -rf "$tmp"
+
+echo "# pull request plan"
+PRP="$(pwd)/$P/scripts/pr-plan.sh"
+tmp=$(mktemp -d); tmp=$(cd "$tmp" && pwd -P); bash "$MAKE" "$tmp/ws"; W="$tmp/ws/.factree/work/009-demo"; mkdir -p "$W" "$tmp/ws/.factree/profiles"
+printf 'frontend\nbackend\ninfra\n' > "$tmp/ws/.factree/repos.md"
+# mk <id> <repo> <depends> <est>: append a task to $W/tasks.md
+mk() { printf '### T%s: t\n\n**Depends on:** %s\n**Est. diff:** ~%s lines\n\n**Files**\n- Create: `%s/x%s.ts`\n\n' "$1" "$3" "$4" "$2" "$1" >> "$W/tasks.md"; }
+plan() { printf -- '---\nreview_budget: %s\n---\n' "${1:-300}" > "$W/plan.md"; : > "$W/tasks.md"; }
+for r in frontend backend infra; do git -C "$tmp/ws/$r" remote set-head origin -a >/dev/null; done
+plan; mk 1 backend none 180; mk 2 frontend none 150
+out=$(bash "$PRP" "$W"); code=$?
+check "independent tasks in two repos each get a PR on their base [multi-repo#R5.S1]" '[ $code -eq 0 ] && [ "$out" = "$(printf "T1\tbackend\tfactree/009-demo-T1\tmain\t-\nT2\tfrontend\tfactree/009-demo-T2\tdevelop\t-")" ]'
+plan; mk 1 backend none 280; mk 3 backend "T1 (needs it)" 280
+out=$(bash "$PRP" "$W")
+check "a dependency in the repo stacks the PR on its branch [multi-repo#R5.S2]" '[ "$out" = "$(printf "T1\tbackend\tfactree/009-demo-T1\tmain\t-\nT3\tbackend\tfactree/009-demo-T3\tfactree/009-demo-T1\t-")" ]'
+plan; mk 1 backend none 200; mk 2 backend none 200; mk 3 backend none 200; mk 4 backend "T2, T3" 200
+out=$(bash "$PRP" "$W")
+check "two dependencies stack on the highest and name the other [multi-repo#R5.S3]" 'echo "$out" | grep -q "^T4	backend	factree/009-demo-T4	factree/009-demo-T3	factree/009-demo-T2$" && [ "$(echo "$out" | tail -1 | cut -f1)" = T4 ]'
+plan; mk 5 infra none 40; mk 6 infra "T5" 60
+out=$(bash "$PRP" "$W")
+check "a small chain shares one PR within review_budget [multi-repo#R5.S4]" '[ "$out" = "$(printf "T5,T6\tinfra\tfactree/009-demo-T6\tmain\t-")" ]'
+plan 90; mk 5 infra none 40; mk 6 infra "T5" 60; out=$(bash "$PRP" "$W")
+check "a chain over review_budget is split [multi-repo#R5.S4]" '[ "$(echo "$out" | wc -l | tr -d " ")" = 2 ]'
+plan; mk 1 backend none 40; mk 2 backend T1 40; mk 3 backend T2 40; mk 4 backend T2 40
+out=$(bash "$PRP" "$W")
+check "a middle task with another dependent ends its PR [multi-repo#R5.S4]" '[ "$out" = "$(printf "T1,T2\tbackend\tfactree/009-demo-T2\tmain\t-\nT3\tbackend\tfactree/009-demo-T3\tfactree/009-demo-T2\t-\nT4\tbackend\tfactree/009-demo-T4\tfactree/009-demo-T2\t-")" ]'
+plan; mk 7 backend none 40; mk 8 backend "T7" 40; mk 9 backend "T7" 40
+out=$(bash "$PRP" "$W")
+check "a task others depend on does not share a PR [multi-repo#R5.S4]" '[ "$(echo "$out" | wc -l | tr -d " ")" = 3 ]'
+plan; mk 1 backend none 100; mk 2 infra none 100; mk 3 frontend "T1, T2" 100
+out=$(bash "$PRP" "$W")
+check "a task depending only on other repos starts from its base and names them [multi-repo#R5.S3]" 'echo "$out" | grep -q "^T3	frontend	factree/009-demo-T3	develop	backend#T1,infra#T2$"'
+printf 'base: trunk\n' > "$tmp/ws/.factree/profiles/backend.md"
+
+out=$(bash "$PRP" "$W")
+check "each repo's base branch comes from its profile, else its default [multi-repo#R5.S6]" 'echo "$out" | grep -q "^T1	backend	[^	]*	trunk" && echo "$out" | grep -q "^T2	infra	[^	]*	main" && echo "$out" | grep -q "	frontend	[^	]*	develop"'
+git -C "$tmp/ws/frontend" remote set-head origin -d; out=$(bash "$PRP" "$W")
+check "without origin/HEAD the base is the remote's default branch [multi-repo#R5.S6]" 'echo "$out" | grep -q "	frontend	[^	]*	develop"'
+rm "$tmp/ws/.factree/repos.md"; plan; mk 1 a none 100; mk 2 b none 100; mk 3 c none 100
+out=$(bash "$PRP" "$W")
+check "a single-repo plan gets one PR per task and no integration branch [multi-repo#R5.S5]" '[ "$(echo "$out" | wc -l | tr -d " ")" = 3 ] && ! echo "$out" | cut -f3,4 | tr "\t" "\n" | grep -qx "factree/009-demo"'
+check "pr-plan.sh stays under 300 lines [multi-repo#R5]" '[ $(wc -l < $PRP) -lt 300 ]'
+rm -rf "$tmp"
 
 exit $fail

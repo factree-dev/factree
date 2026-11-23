@@ -6,9 +6,9 @@
 
 **A self-improving observable software factory for Claude Code.**
 
-You decide. Factree specs, plans, builds and opens the pull request, stops only when it needs you, and learns from every decision.
+You decide. Factree specs, plans, builds and opens the pull requests, one per task, stops only when it needs you, and learns from every decision.
 
-[![version](https://img.shields.io/badge/version-0.17.0-black)](plugins/factree/.claude-plugin/plugin.json)
+[![version](https://img.shields.io/badge/version-0.18.0-black)](plugins/factree/.claude-plugin/plugin.json)
 [![Claude Code plugin](https://img.shields.io/badge/Claude%20Code-plugin-d97757)](#install)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![stages](https://img.shields.io/badge/spec%20·%20plan%20·%20build%20·%20review-working-2ea043)](#status)
@@ -28,7 +28,7 @@ You decide. Factree specs, plans, builds and opens the pull request, stops only 
 - **Plans follow your repo, not a template.** Every pattern a plan reuses cites where your repo already does it. Anything new needs your approval by name.
 - **Tasks fit one code review.** 300 changed lines by default, test-first, each proving named scenarios, reviewed by a fresh reviewer before it merges.
 - **Tests first, nothing claimed.** Every task is built test-first and the branch's full suite runs before the pull request. Verify, which marked scenarios proved or failing, is paused while it's redesigned, so nothing says a scenario is proved.
-- **It runs on its own once nothing is uncertain.** No approval clicks: answer the open decisions and it specs, plans, builds and opens the pull request in the same session. Review comments come back into the flow. It never merges.
+- **It runs on its own once nothing is uncertain.** No approval clicks: answer the open decisions and it specs, plans, builds and opens the pull requests in the same session. Review comments come back into the flow. It never merges.
 
 ## Install
 
@@ -55,12 +55,12 @@ My calls: a. 302 redirects, so every open is counted  b. the same link twice →
 Reply "yes" to take the recommendations, or e.g. "2: after a year".
 ```
 
-Reply `yes` and Factree takes it from there, with no approvals to click through: a plan split by backend and frontend, tasks built in parallel git worktrees, each reviewed before it merges, a review of the whole branch, and a pull request:
+Reply `yes` and Factree takes it from there, with no approvals to click through: a plan split by backend and frontend, tasks built in parallel git worktrees, each on its own branch and reviewed before it merges, a review of the whole branch, and one pull request per task, in each task's repo:
 
 ```
 url-shortener: 3 tasks merged
 npm test: 214 passed · npm run build: ok
-Pull request #42 opened: https://github.com/you/links/pull/42
+Pull requests opened, in merge order: #42 (T1), #43 (T2, on #42), #44 (T3)
 ```
 
 Reviewer comments come back to Claude: a code change goes through build again before it's pushed, a behaviour change through the spec first.
@@ -73,8 +73,8 @@ See the worked example from the recording: [the spec](examples/.factree/specs/ur
 |---|---|---|---|
 | **Spec** | `/factree:spec` | any requirement | `.factree/specs/<capability>.md`: purpose, scope and anti-goals, requirements with scenarios, a sketch of anything you'll see, decisions, open questions |
 | **Plan** | `/factree:plan` | a spec with nothing open | `plan.md` (order, coverage, global constraints, review focus) plus a design and tasks for each vertical it touches: backend, frontend, infra… |
-| **Build** | `/factree:build` | a plan with nothing open | commits on `factree/<work>`, one per task, test-first, reviewed, in parallel where the plan allows, then a review of the whole branch |
-| **Review** | `/factree:review` | an implemented plan | a GitHub pull request saying what was built and where to look; comments looped back through build or the spec; conflicts with the base resolved the repo's way and tested, or brought to you; never merged by Factree (needs the [GitHub CLI](https://cli.github.com)) |
+| **Build** | `/factree:build` | a plan with nothing open | a branch `factree/<work>-T<n>` per task in its repo, test-first, reviewed, in parallel where the plan allows, merged into a local `factree/<work>` for a review of the whole branch |
+| **Review** | `/factree:review` | an implemented plan | one GitHub pull request per task, in its repo, stacked by dependency and linked in merge order, each saying what was built and where to look; comments fixed on the task's branch, through build or the spec; conflicts with the base resolved the repo's way and tested, or brought to you; never merged by Factree (needs the [GitHub CLI](https://cli.github.com)) |
 | **Companion** | `/factree:ui` | a workspace | a local page following every spec live through the stages, where you can make the decisions Claude waits on |
 | **Set up** | `/factree:init` | a repo or folder | a workspace where you want it, with starting preferences (optional: every command makes one on first use) |
 

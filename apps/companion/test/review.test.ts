@@ -91,6 +91,46 @@ describe("the Review stage", () => {
   });
 });
 
+describe("pull requests per repo", () => {
+  it("two repos list their PRs with task, number, base and state [multi-repo#R9.S1]", () => {
+    log([
+      ev("review.opened", { pr: "12", url: "https://github.com/o/backend/pull/12", repo: "backend", tasks: ["T1"], base: "main" }, 30),
+      ev("review.opened", { pr: "45", url: "https://github.com/o/frontend/pull/45", repo: "frontend", tasks: ["T2"], after: ["backend#12"], base: "factree/002-link-report" }, 20),
+      ev("review.state", { pr: "45", repo: "frontend", state: "CHANGES_REQUESTED" }, 10),
+      ev("review.comment", { pr: "12", repo: "backend", id: "1", author: "priya", path: "a.ts", line: "3", body: "backend note" }, 9),
+    ]);
+    const r = workspaceState(root, "A").specs[0]!.plan!.review!;
+    expect(r.prs).toMatchObject([
+      { repo: "backend", number: "12", base: "main", state: "OPEN", tasks: ["T1"] },
+      { repo: "frontend", number: "45", after: ["backend#12"], base: "factree/002-link-report", state: "CHANGES_REQUESTED", tasks: ["T2"] },
+    ]);
+    expect(r.prs![0]!.comments).toHaveLength(1);
+    expect(r.prs![1]!.comments).toHaveLength(0);
+    const h = renderToStaticMarkup(createElement(ReviewView, { detail: specDetail(root, "link-report")! }));
+    expect(h).toMatch(/backend.*href="https:\/\/github.com\/o\/backend\/pull\/12".*T1.*main.*frontend.*href="https:\/\/github.com\/o\/frontend\/pull\/45".*T2.*after.*backend#12.*factree\/002-link-report/s);
+  });
+
+  it("a restacked PR shows its new base [multi-repo#R7, R9]", () => {
+    log([
+      ev("review.opened", { pr: "12", url: "u12", repo: "backend", tasks: ["T1"], base: "main" }, 30),
+      ev("review.opened", { pr: "13", url: "u13", repo: "backend", tasks: ["T2"], base: "factree/002-link-report-T1" }, 25),
+      ev("review.state", { pr: "12", repo: "backend", state: "MERGED" }, 20),
+      ev("review.restacked", { pr: "13", repo: "backend", task: "T2", base: "main", sha: "abc1234" }, 15),
+    ]);
+    const r = workspaceState(root, "A").specs[0]!.plan!.review!;
+    expect(r.prs).toMatchObject([{ number: "12", base: "main" }, { number: "13", base: "main" }]);
+  });
+
+  it("an old single review.opened shows as before [multi-repo#R9.S2]", () => {
+    log([ev("review.opened", { pr: "7", url: "https://github.com/o/r/pull/7", base: "main" })]);
+    const r = workspaceState(root, "A").specs[0]!.plan!.review!;
+    expect(r.prs).toHaveLength(1);
+    const h = renderToStaticMarkup(createElement(ReviewView, { detail: specDetail(root, "link-report")! }));
+    expect(h).toContain("Pull request #7");
+    expect(h).not.toContain("review-repos");
+  });
+});
+
 describe("why there's no pull request", () => {
   const counts = (proved: number, failing: number) => ({ proved, failing, unverified: 0, at: "2026-11-18T10:00:00Z" });
   it("verified, no pull request [stage-spine#R3.S3]", () => {

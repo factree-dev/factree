@@ -171,7 +171,7 @@ Every case must also pass:
 ## Same file, separate regions [parallel-build#R3.S3]
 
 **Setup:** a plan where T2's **Files** has `src/app.js (PATCH route)` and T6's has `src/app.js (export route)`, both ready.
-**Expect:** the pre-flight scan doesn't pair them; both run at once, each in its own subagent and worktree. If the second merge conflicts, its task goes back to its implementer for one rebase onto the plan branch; a conflict after that logs `task.failed` [R3.S3].
+**Expect:** the pre-flight scan doesn't pair them; both run at once, each in its own subagent and worktree. If the second merge conflicts, the conflict is resolved in the merge commit on the integration branch; the task branch is never rebased and keeps only its own commits; a task that needs the other's code is a missing dependency (`task.blocked`), and a conflict that can't be resolved logs `task.failed` [R3.S3].
 **Before the change:** a shared file made the scan run the pair one after the other, and a merge conflict failed the task at once.
 
 ## No subagent tool [parallel-build#R4.S2]
@@ -219,6 +219,30 @@ Every case must also pass:
 
 **Setup:** a build whose whole-branch review finds one should-fix and one must-fix, then fixes both.
 **Expect:** the reviewer subagent is `Review <work> branch`; `task.fixing` for `branch` is logged before the fix round; `branch.reviewed` with `"verdict":"ready"`, `must` 0 and `should` 0 is logged after the re-review, before the hand-over. If the must-fix stays open: `task.failed` and `branch.reviewed` with `"verdict":"fix first"` and `must` 1 [R5.S2].
+
+## Two repos [multi-repo#R3.S1]
+
+**Setup:** `bash tests/fixtures/multi/make.sh <dir>`; a plan with T1 in `backend`, T2 in `frontend`, T2 depending on T1.
+**Expect:** `factree/<work>` is made in both repos from their current commits; T1's worktree and `factree/<work>-T1` are in `backend`, T2's in `frontend` from `frontend`'s current commit; each repo's suite runs with its own profile command [R3.S1]. Nothing is pushed.
+**Before the change:** one `factree/<work>` in one repo; every task branch was cut from it (O2, O3).
+
+## Only its own dependencies [multi-repo#R3.S2]
+
+**Setup:** T1, T2, T3 in `backend`; T3 depends only on T1; T2 merges before T3 starts.
+**Expect:** `factree/<work>-T3` starts from T1's tip and doesn't contain T2's change [R3.S2].
+**Before the change:** T3's branch was cut from the plan branch and held T2's change.
+
+## A baseline fails in one repo [multi-repo#R3.S3]
+
+**Setup:** the `frontend` suite fails on its current commit; `backend` passes.
+**Expect:** the build stops before the first task and names the failing tests as already failing on `factree/<work>` in `frontend` [R3.S3].
+**Before the change:** only one repo's baseline was run.
+
+## Branch reviewer gets every repo [multi-repo#R4.S1]
+
+**Setup:** every task done, in `backend` and `frontend`.
+**Expect:** the `Review <work> branch` prompt names both repos, each with its own diff file and its own checkout path; the diffs are not merged into one file [R4.S1].
+**Before the change:** one diff file and one checkout.
 
 ---
 
