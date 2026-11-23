@@ -25,7 +25,7 @@ if [ -z "$repo" ]; then
   [ "$(echo "$repos" | grep -c .)" -gt 1 ] && { echo "review: $work has pull requests in several repos ($(echo $repos | tr ' ' ',')): name one, wait-review.sh $work <repo>"; exit 0; }
   repo=$repos
 fi
-[ -n "$repo" ] && opened=$(echo "$opened" | grep "\"repo\":\"$repo\"")
+[ -n "$repo" ] && opened=$(echo "$opened" | grep -F "\"repo\":\"$repo\"")
 [ -z "$pr" ] && pr=$(echo "$opened" | tail -n1 | json_field pr)
 [ -z "$pr" ] && { echo "review: no pull request logged for $work${repo:+ in $repo}"; exit 0; }
 # gh's target: the owner/repo of the repo's origin (https or ssh), else the current repo with gh's own placeholders.
@@ -37,7 +37,7 @@ if [ -n "$repo" ]; then
   rarg=(-R "$slug")
 fi
 rjson=""; [ -n "$repo" ] && rjson=",\"repo\":\"$repo\""   # logged on this repo's events
-rpat=""; [ -n "$repo" ] && rpat=".*\"repo\":\"$repo\""     # and matched when reading them back
+rpat=""; [ -n "$repo" ] && rpat=".*\"repo\":\"$(printf %s "$repo" | sed 's/[].[*^$\\]/\\&/g')\""   # matched reading back (. literal)
 every=${FACTREE_WAIT_EVERY:-$FACTREE_REVIEW_EVERY_DEFAULT}; limit=${FACTREE_WAIT_FOR:-$FACTREE_WAIT_FOR_DEFAULT}
 # jq has already turned newlines and tabs in comment bodies into spaces; json_escape handles backslashes and quotes.
 # Run gh and print only its answer (stdout): gh also prints notes and hints on stderr, which are not comments
@@ -74,7 +74,7 @@ EOF
     if [ "$2" = "CONFLICTING" ]; then now=CONFLICTING; else now=${3:-NONE}; fi
     case "$now" in NONE|REVIEW_REQUIRED) now=OPEN ;; esac
   fi
-  last=$(grep "\"type\":\"review.state\",\"work\":\"$work\"$rpat" "$log" 2>/dev/null | tail -n1 | json_field state)
+  last=$(grep "\"type\":\"review.state\",\"work\":\"$work\"$rpat" "$log" 2>/dev/null | grep -F "\"pr\":\"$pr\"" | tail -n1 | json_field state)
   if [ "$now" = "OPEN" ]; then
     if [ "$last" = "CONFLICTING" ]; then   # resolved: log it quietly (review R10.S2)
       bash "$here/event.sh" review.state "$work" "{\"pr\":\"$pr\",\"state\":\"OPEN\"$rjson}" || exit 1

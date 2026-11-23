@@ -15,7 +15,7 @@ A Claude Code plugin for spec-driven development:
 - **A plan decides how, never what.** Every reused pattern cites where the repo uses it; every new pattern needs explicit approval. Scale questions only when a lens trigger applies and the repo can't answer. Behaviour gaps go back to the spec.
 - **Tasks are sized to review capacity** (`review_budget`, default 300 changed lines), vertical slices, test-first, each proving named scenarios (`link-report#R2.S1`).
 - **One process, many kinds of code.** Vertical knowledge lives in lenses (`plugins/factree/lenses/`), chosen by `detect.sh`. Repo overrides in `<workspace>/lenses/` win over built-ins.
-- **Workspace lookup like git:** `$FACTREE_HOME`, else nearest `.factree/` up the tree (one workspace can serve several repos), else `<repo>/.factree`. Holds `specs/`, `work/`, `profiles/`, `lenses/`, `events.jsonl`.
+- **Workspace lookup like git:** `$FACTREE_HOME`, else nearest `.factree/` up the tree (one workspace can serve several repos), else `<repo>/.factree`. Holds `specs/`, `work/`, `profiles/`, `lenses/`, `repos.md` (the repos it serves), `events.jsonl`.
 
 Canonical spec format: `plugins/factree/skills/spec-format/SKILL.md`.
 
@@ -28,7 +28,7 @@ Canonical spec format: `plugins/factree/skills/spec-format/SKILL.md`.
 - `plugins/factree/paused/verify/` — verify, paused while it's redesigned: not a skill, so no `/factree:verify` and no step in the flow. Its files wait here; `scripts/verify-record.sh` stays
 - `plugins/factree/skills/review/` — review skill (pull request, comments, loops)
 - `plugins/factree/skills/spec-format/` — the spec format (loaded by Claude, not invoked)
-- `plugins/factree/scripts/` — shared: `root.sh` (workspace lookup), `detect.sh` (stack and lenses), `event.sh` (activity log, tagged with the Claude Code session), `link.sh` (link to the running UI), `task-done.sh` (mark a built task done), `verify-record.sh` (scenario statuses from test results), `wait-decision.sh` (background wait for a companion decision), `decisions-since.sh` (companion decision lines, delivered once per session), `lessons.sh` (lessons the factory could learn), `wait-review.sh` (follow a pull request with `gh`)
+- `plugins/factree/scripts/` — shared: `root.sh` (workspace lookup), `detect.sh` (stack and lenses), `event.sh` (activity log, tagged with the Claude Code session), `link.sh` (link to the running UI), `task-done.sh` (mark a built task done), `verify-record.sh` (scenario statuses from test results), `wait-decision.sh` (background wait for a companion decision), `decisions-since.sh` (companion decision lines, delivered once per session), `lessons.sh` (lessons the factory could learn), `wait-review.sh` (follow a pull request with `gh`), `repos.sh` (the workspace's repo list, and which repo holds a path), `plan-repos.sh` (each task's repo), `pr-plan.sh` (a plan's pull requests in merge order)
 - `plugins/factree/lenses/` — `README.md` (lens contract), `backend.md`, `frontend.md`, `infra.md`
 - `plugins/factree/shared/profile.md` — repo profile format and refresh rules
 - `plugins/factree/scripts/session-hook.sh` — hook for SessionStart, UserPromptSubmit, Stop, Notification, SessionEnd; writes `<workspace>/sessions/<id>.json`

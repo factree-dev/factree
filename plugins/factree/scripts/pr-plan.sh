@@ -7,20 +7,22 @@
 #   after  PR heads (same repo) or repo#T1+T2 (other repos) that merge first, comma-separated, or -
 # A chain of tasks in one repo shares a PR when each depends only on the one before it, nothing else depends on the
 # earlier ones, and their Est. diff sums to at most review_budget (plan.md, default 300).
-# The repo's base branch: a "base: <name>" line in <workspace>/profiles/<repo>.md, else origin/HEAD, else main.
+# The repo's base branch: a "base: <name>" line in <workspace>/profiles/<repo>.md, else origin/HEAD, else the
+# remote's default branch (git ls-remote --symref), else main.
 work="${1:?usage: pr-plan.sh <work-dir>}"
 here="$(cd "$(dirname "$0")" && pwd)"
 ws=$(cd "$work/../.." && pwd -P) || exit 2
 work=$(cd "$work" && pwd -P); name=$(basename "$work"); top=$(dirname "$ws")
 budget=$(awk '/^review_budget:/ { print $2; exit }' "$work/plan.md" 2>/dev/null); budget=$(( ${budget:-300} + 0 ))
 [ "$budget" -gt 0 ] || budget=300
-repos=$(bash "$here/plan-repos.sh" "$work" 2>/dev/null) || { bash "$here/plan-repos.sh" "$work" >&2 >/dev/null; exit 1; }
+repos=$(bash "$here/plan-repos.sh" "$work") || exit 1   # its problems go to stderr, once
 tfiles=("$work/tasks.md"); for f in "$work"/*/tasks.md; do tfiles+=("$f"); done
 base_of() {
   local r=$1 dir prof b
   dir="$top/$r"; [ "$r" = . ] && dir="$top"; prof="$ws/profiles/$(basename "$dir").md"
   b=$(awk '/^base:/ { sub(/^base:[ \t]*/, ""); print; exit }' "$prof" 2>/dev/null)
   [ -n "$b" ] || b=$(git -C "$dir" symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's#^origin/##')
+  [ -n "$b" ] || b=$(GIT_TERMINAL_PROMPT=0 git -C "$dir" ls-remote --symref origin HEAD 2>/dev/null | awk '$1 == "ref:" { sub(/^refs\/heads\//, "", $2); print $2; exit }')
   echo "${b:-main}"
 }
 for f in "${tfiles[@]}"; do [ -f "$f" ] && cat "$f"; done | REPOS="$repos" awk -v BUDGET="$budget" -v NAME="$name" '

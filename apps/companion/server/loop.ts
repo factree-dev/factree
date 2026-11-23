@@ -59,6 +59,8 @@ function reviewOf(work: string, events: FactreeEvent[]): ReviewInfo | null {
     const ofPr = mine.filter((e) => key(e) === k);
     const opened = [...ofPr].reverse().find((e) => e.type === "review.opened")!;
     const state = [...ofPr].reverse().find((e) => e.type === "review.state")?.data.state;
+    // A restacked pull request was retargeted: its base is the newest of review.opened and review.restacked (R7).
+    const based = [...ofPr].reverse().find((e) => (e.type === "review.opened" || e.type === "review.restacked") && e.data.base) ?? opened;
     const replies = new Map<string, FactreeEvent>();
     for (const e of ofPr) if (e.type === "review.reply") replies.set(String(e.data.comment ?? ""), e);
     const handled = (id: string) => {
@@ -77,7 +79,7 @@ function reviewOf(work: string, events: FactreeEvent[]): ReviewInfo | null {
     const af = opened.data.after;
     const after = Array.isArray(af) ? af.map(String) : af ? String(af).split(/[,\s]+/).filter(Boolean) : [];
     return { repo: String(opened.data.repo ?? ""), number: String(opened.data.pr ?? ""), url: String(opened.data.url ?? ""),
-      base: String(opened.data.base ?? ""), tasks, after, state: String(state ?? "OPEN"), comments };
+      base: String(based.data.base ?? ""), tasks, after, state: String(state ?? "OPEN"), comments };
   });
   const last = prs[prs.length - 1]!;
   return { url: last.url, state: last.state, comments: last.comments, prs };

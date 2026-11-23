@@ -110,6 +110,17 @@ describe("pull requests per repo", () => {
     expect(h).toMatch(/backend.*href="https:\/\/github.com\/o\/backend\/pull\/12".*T1.*main.*frontend.*href="https:\/\/github.com\/o\/frontend\/pull\/45".*T2.*after.*backend#12.*factree\/002-link-report/s);
   });
 
+  it("a restacked PR shows its new base [multi-repo#R7, R9]", () => {
+    log([
+      ev("review.opened", { pr: "12", url: "u12", repo: "backend", tasks: ["T1"], base: "main" }, 30),
+      ev("review.opened", { pr: "13", url: "u13", repo: "backend", tasks: ["T2"], base: "factree/002-link-report-T1" }, 25),
+      ev("review.state", { pr: "12", repo: "backend", state: "MERGED" }, 20),
+      ev("review.restacked", { pr: "13", repo: "backend", task: "T2", base: "main", sha: "abc1234" }, 15),
+    ]);
+    const r = workspaceState(root, "A").specs[0]!.plan!.review!;
+    expect(r.prs).toMatchObject([{ number: "12", base: "main" }, { number: "13", base: "main" }]);
+  });
+
   it("an old single review.opened shows as before [multi-repo#R9.S2]", () => {
     log([ev("review.opened", { pr: "7", url: "https://github.com/o/r/pull/7", base: "main" })]);
     const r = workspaceState(root, "A").specs[0]!.plan!.review!;
