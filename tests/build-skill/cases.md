@@ -171,7 +171,7 @@ Every case must also pass:
 ## Same file, separate regions [parallel-build#R3.S3]
 
 **Setup:** a plan where T2's **Files** has `src/app.js (PATCH route)` and T6's has `src/app.js (export route)`, both ready.
-**Expect:** the pre-flight scan doesn't pair them; both run at once, each in its own subagent and worktree. If the second merge conflicts, its task goes back to its implementer for one rebase onto the plan branch; a conflict after that logs `task.failed` [R3.S3].
+**Expect:** the pre-flight scan doesn't pair them; both run at once, each in its own subagent and worktree. If the second merge conflicts, the conflict is resolved in the merge commit on the integration branch; the task branch is never rebased and keeps only its own commits; a task that needs the other's code is a missing dependency (`task.blocked`), and a conflict that can't be resolved logs `task.failed` [R3.S3].
 **Before the change:** a shared file made the scan run the pair one after the other, and a merge conflict failed the task at once.
 
 ## No subagent tool [parallel-build#R4.S2]
