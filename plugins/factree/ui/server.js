@@ -1195,6 +1195,7 @@ function reviewOf(work, events) {
 		const ofPr = mine.filter((e) => key(e) === k);
 		const opened = [...ofPr].reverse().find((e) => e.type === "review.opened");
 		const state = [...ofPr].reverse().find((e) => e.type === "review.state")?.data.state;
+		const based = [...ofPr].reverse().find((e) => (e.type === "review.opened" || e.type === "review.restacked") && e.data.base) ?? opened;
 		const replies = /* @__PURE__ */ new Map();
 		for (const e of ofPr) if (e.type === "review.reply") replies.set(String(e.data.comment ?? ""), e);
 		const handled = (id) => {
@@ -1219,7 +1220,7 @@ function reviewOf(work, events) {
 			repo: String(opened.data.repo ?? ""),
 			number: String(opened.data.pr ?? ""),
 			url: String(opened.data.url ?? ""),
-			base: String(opened.data.base ?? ""),
+			base: String(based.data.base ?? ""),
 			tasks,
 			after,
 			state: String(state ?? "OPEN"),
