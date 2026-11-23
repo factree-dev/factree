@@ -353,8 +353,22 @@ printf 'MERGED UNKNOWN \n' > "$tmp/bin/state-backend"; wm backend 7
 check "each repo's state is its own, logged with its repo" 'grep -q "\"type\":\"review.state\".*\"pr\":\"7\",\"state\":\"MERGED\",\"repo\":\"backend\"" "$tmp/ws/.factree/events.jsonl" && ! grep "review.state" "$tmp/ws/.factree/events.jsonl" | grep -q "\"repo\":\"frontend\""'
 wm
 check "two repos and no repo named: it says which to name" 'grep -q "^review: 062-x has pull requests in several repos (backend,frontend): name one" "$tmp/out" && [ $(wc -l < "$tmp/out") -eq 1 ]'
+for p in 12 13; do (cd "$tmp/ws/backend" && bash $EVENT review.opened 062-x "{\"pr\":\"$p\",\"url\":\"u\",\"repo\":\"backend\",\"tasks\":\"T$p\",\"base\":\"main\"}"); done
+printf 'OPEN MERGEABLE APPROVED\n' > "$tmp/bin/state-backend"; wm backend 12; wm backend 13
+check "two PRs in one repo reaching the same state are each logged [multi-repo#R8]" 'grep -q "\"type\":\"review.state\".*\"pr\":\"12\",\"state\":\"APPROVED\",\"repo\":\"backend\"" "$tmp/ws/.factree/events.jsonl" && grep -q "\"type\":\"review.state\".*\"pr\":\"13\",\"state\":\"APPROVED\",\"repo\":\"backend\"" "$tmp/ws/.factree/events.jsonl" && grep -q "^review: APPROVED$" "$tmp/out"'
 git -C "$tmp/ws/frontend" remote set-url origin https://gitlab.com/acme/frontend.git; wm frontend
 check "a non-GitHub remote stops the follower with one line" 'grep -q "^review: frontend.s origin is not a GitHub remote" "$tmp/out" && [ $(wc -l < "$tmp/out") -eq 1 ]'
+rm -rf "$tmp"
+
+echo "# review, one repo (repo .)"
+tmp=$(mktemp -d); mkdir -p "$tmp/r/.factree" "$tmp/bin"; : > "$tmp/r/.factree/events.jsonl"; git -C "$tmp/r" init -q
+git -C "$tmp/r" remote add origin https://github.com/acme/r.git
+printf '#!/usr/bin/env bash\n[ "$1" = pr ] && cat "$(dirname "$0")/state"; exit 0\n' > "$tmp/bin/gh"; chmod +x "$tmp/bin/gh"
+printf 'OPEN MERGEABLE APPROVED\n' > "$tmp/bin/state"
+(cd "$tmp/r" && bash $EVENT review.state 062-s '{"pr":"9","state":"APPROVED","repo":"x"}')
+for p in 12 13; do (cd "$tmp/r" && bash $EVENT review.opened 062-s "{\"pr\":\"$p\",\"url\":\"u\",\"repo\":\".\",\"base\":\"main\"}"); done
+for p in 12 13; do (cd "$tmp/r" && PATH="$tmp/bin:$PATH" bash "$WR" 062-s . "$p" --once >/dev/null 2>&1); done
+check "repo . : each PR's state is logged, and . is not a wildcard [multi-repo#R8]" '[ $(grep -c "\"type\":\"review.state\".*\"state\":\"APPROVED\",\"repo\":\"\.\"" "$tmp/r/.factree/events.jsonl") -eq 2 ]'
 rm -rf "$tmp"
 
 echo "# review catch-up, several repos"
