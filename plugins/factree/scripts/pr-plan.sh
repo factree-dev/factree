@@ -22,7 +22,7 @@ base_of() {
   dir="$top/$r"; [ "$r" = . ] && dir="$top"; prof="$ws/profiles/$(basename "$dir").md"
   b=$(awk '/^base:/ { sub(/^base:[ \t]*/, ""); print; exit }' "$prof" 2>/dev/null)
   [ -n "$b" ] || b=$(git -C "$dir" symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's#^origin/##')
-  [ -n "$b" ] || b=$(git -C "$dir" ls-remote --symref origin HEAD 2>/dev/null | awk '$1 == "ref:" { sub(/^refs\/heads\//, "", $2); print $2; exit }')
+  [ -n "$b" ] || b=$(GIT_TERMINAL_PROMPT=0 git -C "$dir" ls-remote --symref origin HEAD 2>/dev/null | awk '$1 == "ref:" { sub(/^refs\/heads\//, "", $2); print $2; exit }')
   echo "${b:-main}"
 }
 for f in "${tfiles[@]}"; do [ -f "$f" ] && cat "$f"; done | REPOS="$repos" awk -v BUDGET="$budget" -v NAME="$name" '
