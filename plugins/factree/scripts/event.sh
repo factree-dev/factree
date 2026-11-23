@@ -3,11 +3,11 @@
 # Usage: event.sh <type> <subject-id> ['<json object>']
 #   subject-id is a spec id for spec.*, question.*, decision.*; a work id for plan.*
 # Example: event.sh spec.approved link-report '{"by":"John Doe"}'
-# Pull request events (multi-repo R8): review.opened {pr,url,repo,tasks,base,after} (after: optional list of "repo#number" PRs to merge first); review.comment, review.state and
+# Pull request events (multi-repo R8): review.opened {pr,url,repo,tasks,base,after,sha} (after: optional list of "repo#number" PRs to merge first; sha: the head commit pushed); review.restacked {pr,repo,task,base,sha} (sha: the head commit after a restack, fix or update push); review.comment, review.state and
 # review.reply carry the same "repo" (a repo folder as in repos.md). An event without "repo" is the only repo's.
 # Inside Claude Code, the event also records the session (CLAUDE_CODE_SESSION_ID).
 
-types="spec.created spec.updated spec.approved spec.step question.asked question.answered question.opened question.resolved decision.recorded plan.created plan.design_approved plan.approved plan.implemented task.started task.done task.failed task.blocked spec.verified decision.feedback task.reviewed bug.escaped lesson.proposed lesson.approved lesson.rejected review.opened review.comment review.state review.reply stage.step agent.started task.waiting task.fixing branch.reviewed"
+types="spec.created spec.updated spec.approved spec.step question.asked question.answered question.opened question.resolved decision.recorded plan.created plan.design_approved plan.approved plan.implemented task.started task.done task.failed task.blocked spec.verified decision.feedback task.reviewed bug.escaped lesson.proposed lesson.approved lesson.rejected review.opened review.restacked review.comment review.state review.reply stage.step agent.started task.waiting task.fixing branch.reviewed"
 
 type="$1"; subject="$2"; data="${3:-}"
 [ -z "$data" ] && data='{}'

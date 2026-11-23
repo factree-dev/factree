@@ -3,8 +3,8 @@
 A Claude Code plugin for spec-driven development:
 - `/factree:spec`: any requirement (ticket, Confluence page, task, list, conversation) → a spec grounded in the code.
 - `/factree:plan`: an approved spec → `plan.md` (scope, order, coverage, status) plus, per vertical it touches, `<vertical>/design.md` (how, from the repo's own patterns) and `<vertical>/tasks.md` (work sized for one code review each).
-- `/factree:build`: an approved plan → code, task by task test-first, in parallel by dependencies, each in a git worktree merged into `factree/<work>`, marked done with evidence; never pushes.
-- `/factree:review`: after the build, push `factree/<work>` and open a GitHub pull request (via `gh`), follow it in the background, and loop review comments back through build, or the spec for behaviour changes; never merges.
+- `/factree:build`: an approved plan → code, task by task test-first, in parallel by dependencies, each in a git worktree on its own task branch `factree/<work>-T<n>` (per repo), merged into the integration branch `factree/<work>`, marked done with evidence; never pushes.
+- `/factree:review`: after the build, push the task branches and open one GitHub pull request per task (via `gh`, in its repo, stacked and linked in merge order, all or none), follow each in the background, keep stacks clean after merges, and fix review comments as commits on the task's branch, or via the spec for behaviour changes; never merges, never pushes `factree/<work>`.
 - `/factree:ui`: a local page that follows specs and plans live through every stage, where the user can also make the decisions Claude waits on. Skills link to it with `scripts/link.sh`.
 - The stages hand on to each other (factory-flow): a spec or plan with nothing open is approved by the flow, then planned, built and sent for review as a pull request, stopping only for open decisions; `flow: step` in preferences brings back approval stops.
 

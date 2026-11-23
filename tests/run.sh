@@ -580,6 +580,8 @@ out=$(prompt)
 check "decisions made in the companion come with the next prompt [companion-decisions#R8.S4]" 'echo "$out" | grep -q "^Decided in the Factree companion since your last turn:$" && echo "$out" | grep -q "^- link-report question 3: Beside each scenario id (John Doe)$" && echo "$out" | grep -q "^- 016-verify changes requested: split T4 (John Doe)$" && echo "$out" | grep -q "^- version-check spec approved (John Doe (via companion))$" && ! echo "$out" | grep -q "old answer\|in chat"'
 out=$(prompt)
 check "nothing new, nothing added [companion-decisions#R8.S5]" '[ -z "$out" ]'
+(cd "$tmp/ws/repo" && bash $EVENT review.restacked 062-x '{"pr":"12","repo":"backend","task":"T3","base":"main","sha":"abc1234"}')
+check "event.sh accepts review.restacked on the work [multi-repo#R7]" 'grep -q "\"type\":\"review.restacked\",\"work\":\"062-x\"" "$tmp/ws/.factree/events.jsonl"'
 check "event.sh accepts decision.feedback" '(cd "$tmp/ws/repo" && bash $EVENT decision.feedback demo "{\"note\":\"x\"}" 2>/dev/null)'
 rm -rf "$tmp"
 
