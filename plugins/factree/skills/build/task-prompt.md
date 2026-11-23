@@ -9,7 +9,7 @@ You are building one task of an approved plan. You haven't seen the discussion a
 - **Task:** `<work>` `<T<n>: title>` in `<workspace>/work/<work>/<vertical>/tasks.md`. Read the whole task: Proves, Files, Interfaces, Steps.
 - **Design:** `<workspace>/work/<work>/<vertical>/design.md`. Follow the patterns it cites, by their paths.
 - **Spec:** `<workspace>/specs/<spec>.md`, for the scenarios the task proves.
-- **Branch:** you're on `factree/<work>-T<n>`, made from `factree/<work>`. Commit only here.
+- **Branch:** you're on `factree/<work>-T<n>`, made from `<start commit>` (its same-repo dependencies' task branches, or the repo's current commit), never from `factree/<work>`. Commit only here; never rebase onto or merge in another branch.
 - **Budget:** at most `<review_budget>` changed lines, tests included.
 
 Do the task's steps in order:
