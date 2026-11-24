@@ -153,3 +153,33 @@ describe("activity names the task", () => {
     expect(state().activity).toBeNull();
   });
 });
+
+describe("review verdicts and history [build-status]", () => {
+  const rev = (min: number, task: string, v: string, n: number, extra: object = {}) => ev(min, "task.reviewed", { task, spec: "pass", quality: v, findings: Array.from({ length: n }, () => ({ text: "x", beyond_sources: false })), ...extra });
+  const fix = (min: number, task: string, round: number, cause: string) => ev(min, "task.fixing", { task, round, cause });
+  const rr = (min: number, task: string) => ev(min, "agent.started", { role: "review", task, model: "opus" });
+  it("passed after a fix round reads reviewed ✓ [build-status#R1.S1]", () => {
+    log([rr(9, "T3"), rev(8, "T3", "fail", 3), fix(7, "T3", 1, "x"), rr(6, "T3"), rev(5, "T3", "pass", 0, { round: 1, cause: "x" }), ev(4, "task.done", { task: "T3", commit: "c", lines: 1 })]);
+    expect(plan().build.T3).toMatchObject({ verdict: "pass/pass", reviewerRecorded: true, findings: 0 });
+  });
+  it("still failing shows Fix round 2 [build-status#R1.S2]", () => {
+    log([rr(9, "T4"), rev(8, "T4", "fail", 1), fix(7, "T4", 1, "a"), rr(6, "T4"), rev(5, "T4", "fail", 1, { round: 1, cause: "a" }), fix(4, "T4", 2, "b")]);
+    expect(plan().build.T4).toMatchObject({ verdict: "pass/fail", phase: "fixing", round: 2, cause: "b" });
+  });
+  it("an old marker without a verdict is a fix round [build-status#R1.S3]", () => {
+    log([rr(9, "T3"), rev(8, "T3", "fail", 1), ev(7, "task.reviewed", { task: "T3", round: 1, cause: "old" })]);
+    expect(plan().build.T3).toMatchObject({ verdict: "pass/fail", round: 1, cause: "old", history: [{ kind: "review" }, { kind: "fix", round: 1, cause: "old" }] });
+  });
+  it("history lists review, fix, review, fix, review in order [build-status#R2.S1]", () => {
+    log([rev(9, "T3", "fail", 3), fix(8, "T3", 1, "one"), rev(7, "T3", "fail", 1, { round: 1 }), fix(6, "T3", 2, "two"), rev(5, "T3", "pass", 0, { round: 2 })]);
+    expect(plan().build.T3!.history!.map((h) => h.kind + (h.kind === "fix" ? h.round : h.findings))).toEqual(["review3", "fix1", "review1", "fix2", "review0"]);
+  });
+  it("branch panel lists pass 1 with 5 findings, fix round 1, pass 2, Ready [build-status#R3.S1]", () => {
+    const fs = [finding("must"), ...Array.from({ length: 4 }, () => finding("should"))];
+    log([...doneAll, ev(4, "agent.started", { role: "review", task: "branch", model: "opus" }), ev(3, "task.reviewed", { task: "branch", findings: fs, not_probed: [] }), ev(2, "task.fixing", { task: "branch", round: 1, cause: "all" }),
+      ev(2, "task.reviewed", { task: "branch", round: 1, cause: "all", findings: [], not_probed: [] }), ev(1, "branch.reviewed", { verdict: "ready", must: 0, should: 0 })]);
+    const b = plan().branchReview!;
+    expect(b.passes.map((p) => p.findings.length)).toEqual([5, 0]);
+    expect(b.passes[0]!.fix).toEqual({ round: 1, cause: "all" });
+  });
+});

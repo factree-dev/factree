@@ -1,7 +1,7 @@
 // The plan's Build tab: each task's status as it builds (spec build R8).
 
 import { verticalLabel } from "../../words.ts";
-import type { Plan, TaskBuild, BranchReview } from "../../../shared/types.ts";
+import type { Plan, TaskBuild, TaskHistory, BranchReview } from "../../../shared/types.ts";
 import { CopyCommand } from "../bits.tsx";
 import { planHref } from "../../links.ts";
 
@@ -25,6 +25,13 @@ function reviewNotes(b: TaskBuild): string[] {
   if (b.status === "done" && b.model) n.push(b.model);
   return n;
 }
+// The task's reviews and fix rounds in order, behind a toggle once it had a fix round (build-status R2).
+function History({ h }: { h: TaskHistory[] }) {
+  if (!h.some((x) => x.kind === "fix")) return null;
+  const plural = (n: number) => `${n} finding${n === 1 ? "" : "s"}`;
+  let n = 0;
+  return <details className="count"><summary>History</summary><ol>{h.map((x, i) => <li key={i}>{x.kind === "review" ? `Review ${++n}: ${x.verdict} · ${plural(x.findings)}` : `Fix round ${x.round}: ${x.cause}`}</li>)}</ol></details>;
+}
 // Builds log "must"/"should"/"minor" (or "must-fix"/"should-fix"): matched by prefix, as stages.ts does.
 const SEVERITY = ["must-fix", "should-fix", "minor"];
 const severity = (s: string) => /^must/i.test(s) ? "must-fix" : /^should/i.test(s) ? "should-fix" : "minor";
@@ -36,11 +43,16 @@ function BranchPanel({ r }: { r: BranchReview }) {
   return (
     <section className="branch-review" aria-label="Branch review">
       <h3>Branch review{r.phase === "probing" && <span className="count"> · Probing</span>}{r.phase === "fixing" && <span className="count"> · Fixing</span>}</h3>
-      {findings.length > 0 && <ul className="br-findings">{findings.map((f, i) => (
+      {r.passes.length > 0 ? r.passes.map((p, i) => (
+        <div key={i}><h4>Pass {i + 1}</h4>
+          {p.findings.length > 0 && <ul className="br-findings">{[...p.findings].sort((a, b) => rank(a.severity) - rank(b.severity)).map((f, j) => <li key={j}><span className={`sev ${severity(f.severity)}`}>{severity(f.severity)}</span> {f.text}{f.evidence && <div className="evidence"><code>{f.evidence}</code></div>}</li>)}</ul>}
+          {p.fix && <p>Fix round {p.fix.round}: {p.fix.cause}</p>}
+        </div>
+      )) : findings.length > 0 && <ul className="br-findings">{findings.map((f, i) => (
         <li key={i}><span className={`sev ${severity(f.severity)}`}>{severity(f.severity)}</span> {f.text}{f.evidence && <div className="evidence"><code>{f.evidence}</code></div>}</li>
       ))}</ul>}
       {r.notProbed.length > 0 && <><h4>Not probed</h4><ul>{r.notProbed.map((n, i) => <li key={i}><strong>{n.area}</strong>: {n.reason}</li>)}</ul></>}
-      {r.rounds.length > 0 && <ul>{r.rounds.map((x) => <li key={x.round}>Fix round {x.round}: {x.cause}</li>)}</ul>}
+      {r.passes.length === 0 && r.rounds.length > 0 && <ul>{r.rounds.map((x) => <li key={x.round}>Fix round {x.round}: {x.cause}</li>)}</ul>}
       {r.phase === "ended" && <p className="br-outcome"><strong>{r.must === 0 ? "Ready: 0 must-fix open" : `${r.must} must-fix open`}</strong></p>}
     </section>
   );
@@ -66,7 +78,7 @@ export function BuildTab({ plan, specId }: { plan: Plan; specId: string }) {
                 <td><a className="ref" href={planHref(specId, plan.work, v, t.id)}>{t.id}</a> {t.title}</td>
                 <td>{verticalLabel(v)}</td>
                 <td><span className={`build-status ${b.status}`}>{BUILD_LABEL[b.status]}</span>{stateText(b, waitingOn) && <span className="count"> {stateText(b, waitingOn)}</span>}</td>
-                <td>{b.status === "done" ? <><code>{b.commit}</code> · {b.lines} lines</> : b.status === "waiting" ? "" : b.reason ?? ""}{reviewNotes(b).length > 0 && <div className="count">{reviewNotes(b).join(" · ")}</div>}</td>
+                <td>{b.status === "done" ? <><code>{b.commit}</code> · {b.lines} lines</> : b.status === "waiting" ? "" : b.reason ?? ""}{reviewNotes(b).length > 0 && <div className="count">{reviewNotes(b).join(" · ")}</div>}{b.history && <History h={b.history} />}</td>
               </tr>
             );
           })}
