@@ -1175,8 +1175,24 @@ function brief(plans, events = []) {
 		done: builds.filter((b) => b.status === "done").length,
 		implemented: Boolean(p.implementedAt),
 		review: reviewOf(p.work, events),
-		...p.branchReview ? { branchReview: p.branchReview } : {}
+		...p.branchReview ? { branchReview: p.branchReview } : {},
+		...holdFor(p.work, events)
 	};
+}
+/** The work's current hold (build-status R4, D3): the last stage.held, cleared by a stage.released for that stage;
+*  a release with no hold before it changes nothing. */
+function holdFor(work, events) {
+	let hold = null;
+	for (const e of events) {
+		if (e.work !== work) continue;
+		if (e.type === "stage.held") hold = {
+			stage: String(e.data.stage ?? ""),
+			reason: String(e.data.reason ?? ""),
+			since: e.ts
+		};
+		else if (e.type === "stage.released" && hold && e.data.stage === hold.stage) hold = null;
+	}
+	return hold ? { hold } : {};
 }
 /** The plan's pull requests, keyed by repo and number (multi-repo R9): state and comments with how each was handled
 *  (review R8). No repo means the workspace's only repo. The top-level fields are the newest pull request's. */

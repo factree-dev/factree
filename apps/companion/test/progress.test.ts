@@ -7,6 +7,9 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { specDetail } from "../server/workspace.ts";
 import { LoopLine } from "../src/components/LoopLine.tsx";
 import { progressOf } from "../src/progress.ts";
+import { brief } from "../server/loop.ts";
+import { SpecLink } from "../src/components/Sidebar.tsx";
+import type { SpecSummary } from "../shared/types.ts";
 
 let root: string;
 const at = (min: number) => new Date(Date.now() - min * 60000).toISOString();
@@ -52,5 +55,28 @@ describe("spec progress", () => {
   it("the list doesn't say your approval", () => {
     log([step(3, "gaps"), step(1, "approval")]);
     expect(progressOf(page().d.summary, null).centre).not.toContain("your approval");
+  });
+});
+
+describe("a held stage shows its reason [build-status#R4]", () => {
+  const ev = (min: number, type: string, data: object) => ({ ts: at(min), type, spec: "spec-order", work: "064-x", data });
+  const held = ev(22, "stage.held", { stage: "review", reason: "acceptance run on SHORT-43" });
+  const summary = (events: ReturnType<typeof ev>[]) => ({
+    id: "spec-order", title: "t", status: "approved", lastMoved: null, lastActivity: null, hasFile: true, requirements: 1, scenarios: 1, openQuestions: 0,
+    live: { open: false, step: null, stepNote: "", steps: [], pendingQuestion: null, pending: [], answered: [], session: null }, verify: null,
+    plan: brief([{ work: "064-x", status: "approved", approvedAt: "2026-11-24", build: {} } as never], events as never),
+  }) as never as SpecSummary;
+  it("held review reads `Held: acceptance run on SHORT-43 · 22 min` on the spine and the row [build-status#R4.S1]", () => {
+    const s = summary([held]);
+    s.plan!.implemented = true;
+    s.plan!.review = { pr: "42", url: "u", state: "OPEN", comments: [] } as never;   // the hold wins even with a pull request
+    expect(progressOf(s, null).stages.find((x) => x.key === "review")!.sub).toBe("Held: acceptance run on SHORT-43 · 22 min");
+    expect(renderToStaticMarkup(createElement(SpecLink, { s, active: false }))).toContain("Held: acceptance run on SHORT-43 · 22 min");
+  });
+  it("after stage.released it reads Open the pull request [build-status#R4.S2]", () => {
+    const s = summary([held, ev(1, "stage.released", { stage: "review" })]);
+    s.plan!.implemented = true;
+    expect(s.plan!.hold).toBeUndefined();
+    expect(progressOf(s, null, 0, false).stages.find((x) => x.key === "review")!.sub).toBe("Open the pull request");
   });
 });

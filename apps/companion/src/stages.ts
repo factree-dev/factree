@@ -24,6 +24,14 @@ export function reviewStage(s: SpecSummary, verifyOn: boolean = VERIFY_ON): { su
   return { sub: "No pull request yet", href, done: false };
 }
 
+/** A held stage's label (build-status R4, D3): the reason and how long, over the station's usual label. */
+export function heldSub(s: SpecSummary, key: string, now = Date.now()): string | null {
+  const h = s.plan?.hold;
+  if (!h || h.stage !== key) return null;
+  const m = Math.max(0, Math.floor((now - Date.parse(h.since)) / 60000));
+  return `Held: ${h.reason} · ${m < 60 ? `${m} min` : `${Math.floor(m / 60)} h`}`;
+}
+
 export function shortDate(iso: string): string {
   const d = new Date(`${iso}T12:00:00`);
   return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString(undefined, { day: "numeric", month: "short" });
