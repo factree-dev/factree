@@ -828,6 +828,15 @@ check "two writers at once: both moves applied, valid JSON, both events [status-
 rm -rf "$tmp"
 sw; mkdir -p "$W/state/.lock-link-report"; touch -t 202001010000 "$W/state/.lock-link-report"; out=$(st link-report write); code=$?
 check "a lock older than 30 s is taken over" '[ $code -eq 0 ] && grep -q "\"spec\": \"writing\"" "$SF" && [ ! -d "$W/state/.lock-link-report" ]'
+sw; sh -c 'exit 0' & dead=$!; wait $dead; mkdir -p "$W/state/.lock-link-report"; echo $dead > "$W/state/.lock-link-report/pid"; out=$(st link-report write); code=$?
+check "a lock whose process is gone is taken over at once" '[ $code -eq 0 ] && grep -q "\"spec\": \"writing\"" "$SF" && [ ! -d "$W/state/.lock-link-report" ] && ! ls -a "$W/state" | grep -q stale'
+mkdir "$W/state/.lock-link-report"; echo $$ > "$W/state/.lock-link-report/pid"; before=$(snap); out=$(st link-report approve); code=$?
+check "a lock held by a running process: exit 4, nothing changed" '[ $code -eq 4 ] && [ "$before" = "$(snap)" ]'
+rmdir "$W/state/.lock-link-report" 2>/dev/null; rm -rf "$W/state/.lock-link-report"
+before=$(snap); out=$(st link-report hold stage=Review reason=x); c1=$?; out2=$(st link-report task-done work=002-link-report "task=T1 T2"); c2=$?; out3=$(st link-report hold stage=review reason=x pr="1 2"); c3=$?
+check "an upper-case stage and spaces in task or pr are refused, naming the field" '[ $c1 -eq 3 ] && echo "$out" | grep -q stage && [ $c2 -eq 3 ] && echo "$out2" | grep -q task && [ $c3 -eq 3 ] && echo "$out3" | grep -q pr && [ "$before" = "$(snap)" ]'
+echo 'garbage' >> "$SF"; before=$(snap); out=$(st link-report approve); code=$?; n=$(wc -l < "$SF" | tr -d " ")
+check "an unreadable state line refuses the move and names it" '[ $code -eq 3 ] && [ "$out" = "state/link-report.json line $n is not readable; fix or remove it" ] && [ "$before" = "$(snap)" ]'
 rm -rf "$tmp"
 check "state.sh stays under 300 lines" '[ $(wc -l < "$ST") -lt 300 ]'
 

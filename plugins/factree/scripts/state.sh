@@ -12,6 +12,7 @@
 # Exit 0 when applied or already so ("<…> is already …"), 2 on bad usage, 3 when not allowed (nothing changed),
 # 4 when the lock can't be had within 5 s.
 
+export LC_ALL=C   # character classes mean ASCII only, whatever the caller's locale
 here="$(cd "$(dirname "$0")" && pwd)"
 spec="$1"; move="$2"
 usage() { echo "usage: state.sh <spec-id> <move> [<field>=<value>…]" >&2; exit 2; }
@@ -41,6 +42,7 @@ for arg in "$@"; do
   case "$k" in
     work|task|pr|stage|reason)
       case "$v" in *[!A-Za-z0-9#._\ -]*) echo "$k may hold only letters, digits and #._ - : $v" >&2; exit 3 ;; esac
+      case "$k:$v" in task:*" "*|pr:*" "*) echo "$k may not hold a space: $v" >&2; exit 3 ;; esac
       eval "$k=\$v" ;;
     *)
       case "$v" in *'"'*|*\\*|*"
@@ -61,19 +63,32 @@ set_status() {
     { print }' "$1" > "$1.$$" && mv "$1.$$" "$1"
 }
 
-# The lock: mkdir is atomic. Wait up to 5 s; a lock older than 30 s is left from a crash and removed (D2).
+# The lock: mkdir is atomic, and the holder writes its pid into it. Wait up to 5 s. A lock is stale, left from a
+# crash, when its pid is no longer running or it is older than 30 s (no move takes that long) (D2).
 mkdir -p "$dir" || exit 1
 lock="$dir/.lock-$spec"
 mtime() { stat -c %Y "$1" 2>/dev/null || stat -f %m "$1" 2>/dev/null; }
+stale() {
+  pid=$(cat "$1/pid" 2>/dev/null)
+  case "$pid" in ""|*[!0-9]*) ;; *) err=$(kill -0 "$pid" 2>&1) || case "$err" in *ermitted*) ;; *) return 0 ;; esac ;; esac
+  m=$(mtime "$1"); [ -n "$m" ] && [ $(( $(date +%s) - m )) -gt 30 ]
+}
+# Taking over: one waiter at a time (mkdir .take-<spec>), which checks again that the lock is stale, then
+# renames it aside, so a fresh lock made after another waiter's take-over is never removed.
+take_over() {
+  mkdir "$dir/.take-$spec" 2>/dev/null || { stale "$dir/.take-$spec" && rm -rf "$dir/.take-$spec"; return 1; }
+  took=1; stale "$lock" && mv "$lock" "$lock.stale.$$" 2>/dev/null && rm -rf "$lock.stale.$$" && took=0
+  rmdir "$dir/.take-$spec"; return $took
+}
 tries=0
 until mkdir "$lock" 2>/dev/null; do
-  m=$(mtime "$lock")
-  if [ -n "$m" ] && [ $(( $(date +%s) - m )) -gt 30 ]; then rm -rf "$lock"; continue; fi
+  stale "$lock" && take_over && continue
   tries=$((tries + 1))
   [ $tries -ge 50 ] && { echo "$spec is locked by another state.sh ($lock); try again" >&2; exit 4; }
   sleep 0.1
 done
-trap 'rmdir "$lock" 2>/dev/null' EXIT
+echo $$ > "$lock/pid"
+trap 'rm -f "$lock/pid"; rmdir "$lock" 2>/dev/null' EXIT
 
 # The plan's task count, from its tasks files in either layout.
 [ -z "$work" ] && [ -f "$file" ] && work=$(sed -n 's/^  "plan": "\(.*\)",*$/\1/p' "$file")

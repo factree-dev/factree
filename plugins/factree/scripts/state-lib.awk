@@ -1,10 +1,11 @@
 # The moves of state.sh (status-state R3, D4): reads a spec's state file, applies one move.
 # Variables: SPEC MOVE W TASK PR STAGE REASON TOTAL NOW, and INIT (the spec stage when there is no state yet).
 # Prints "ok", "already <message>" or "refuse <message>"; after "ok", one "<rank>\t<key>\t<value>" line per key of
-# the new state, the rank giving the fixed key order (status-state D2).
+# the new state, the rank giving the fixed key order (status-state D2). A line it can't read refuses every move.
 {
   line = $0
-  if (line !~ /^ *"[^"]+": "[^"]*",?$/) next
+  if (line == "{" || line == "}") next
+  if (line !~ /^  "[^"]+": "[^"]*",?$/) { if (!bad) bad = NR; next }
   sub(/^ *"/, "", line); i = index(line, "\": \"")
   val = substr(line, i + 4); sub(/",?$/, "", val)
   V[substr(line, 1, i - 1)] = val
@@ -20,6 +21,7 @@ function rank(k) {
   return 50
 }
 END {
+  if (bad) { print "refuse state/" SPEC ".json line " bad " is not readable; fix or remove it"; exit }
   if (!("spec" in V)) V["spec"] = INIT
   s = V["spec"]
   if (W == "" && ("plan" in V)) W = V["plan"]
