@@ -8,7 +8,7 @@
 
 You decide. Factree specs, plans, builds and opens the pull requests, one per task, stops only when it needs you, and learns from every decision.
 
-[![version](https://img.shields.io/badge/version-0.18.0-black)](plugins/factree/.claude-plugin/plugin.json)
+[![version](https://img.shields.io/badge/version-0.18.1-black)](plugins/factree/.claude-plugin/plugin.json)
 [![Claude Code plugin](https://img.shields.io/badge/Claude%20Code-plugin-d97757)](#install)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![stages](https://img.shields.io/badge/spec%20·%20plan%20·%20build%20·%20review-working-2ea043)](#status)
