@@ -76,12 +76,13 @@ export function liveFor(specId: string, spec: Spec | undefined, events: FactreeE
     pending: open ? all.filter((q) => q.answer === undefined) : [],
     answered: open ? all.filter((q) => q.answer !== undefined) : [],
     session: open ? sessionFor(lastAny?.cwd, sessions) : null,
+    reopened: runEvents.some((e) => e.type === "question.asked" || e.type === "spec.updated"),
   };
 }
 
 /** What the UI shows for a spec (spec-status R2–R5). */
 export function displayStatus(fileStatus: SpecStatus | null, live: Live, lastMoved: string | null, now: number): DisplayStatus {
-  if (fileStatus === "approved" || fileStatus === "live") return fileStatus;   // an approved file is not reopened by a run still wrapping up (spec-status R1)
+  if ((fileStatus === "approved" || fileStatus === "live") && !live.reopened) return fileStatus;   // an approved file is not reopened by a run that only logged steps (spec-status R1)
   if (live.open) {
     const working = live.session?.state === "working";
     const blocked = live.pendingQuestion || live.step === "approval" || live.session?.state === "waiting";
