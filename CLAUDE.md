@@ -41,6 +41,7 @@ Canonical spec format: `plugins/factree/skills/spec-format/SKILL.md`.
 ## Conventions
 
 - Scripts are bash plus POSIX awk only, so they run on macOS's BSD awk and Linux mawk/gawk. No jq, Python or Node. Don't use awk built-in names (RS, FS, NR…) as variables, and test array membership with `in` (a plain lookup creates the element).
+- Every change under `plugins/factree/` bumps the version in `plugin.json` and the README badge together: patch for fixes, minor for new behaviour (CI checks it).
 - Run `bash tests/run.sh` after changing any script. Rerun the relevant skill cases after changing a skill or lens.
 - The example and the test fixture's spec and plans must validate with 0 errors and 0 warnings.
 - New lenses follow the contract in `plugins/factree/lenses/README.md` exactly.
