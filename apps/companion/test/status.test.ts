@@ -73,11 +73,11 @@ describe("displayStatus after an approval", () => {
   };
   const approved = ev("spec.approved", "2026-11-24T22:50:00Z");
 
-  it("approved file, a question asked after the approval and unanswered reads needs you [spec-status#R1.S2]", () => {
+  it("approved file, a question asked after the approval and unanswered reads needs you [spec-status#R1.S3]", () => {
     expect(status([approved, ev("spec.step", "2026-11-24T22:50:02Z", { step: "questions" }), ev("question.asked", "2026-11-24T22:50:03Z", { n: 1, text: "?" })], "waiting")).toBe("needs_you");
   });
 
-  it("approved file, spec.updated after the approval with a writing step reads writing [spec-status#R1.S2]", () => {
+  it("approved file, spec.updated after the approval with a writing step reads writing [spec-status#R1]", () => {
     expect(status([approved, ev("spec.updated", "2026-11-24T22:50:02Z"), ev("spec.step", "2026-11-24T22:50:03Z", { step: "writing" })])).toBe("writing");
   });
 
