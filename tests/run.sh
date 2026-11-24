@@ -838,6 +838,47 @@ check "an upper-case stage and spaces in task or pr are refused, naming the fiel
 echo 'garbage' >> "$SF"; before=$(snap); out=$(st link-report approve); code=$?; n=$(wc -l < "$SF" | tr -d " ")
 check "an unreadable state line refuses the move and names it" '[ $code -eq 3 ] && [ "$out" = "state/link-report.json line $n is not readable; fix or remove it" ] && [ "$before" = "$(snap)" ]'
 rm -rf "$tmp"
+# Staleness by what the plan covers (002-link-report: R5, R6).
+spec_edit() { awk "$1" "$W/specs/link-report.md" > "$tmp/s" && cp "$tmp/s" "$W/specs/link-report.md"; }
+sw; st link-report approve >/dev/null; st link-report plan work=002-link-report >/dev/null; st link-report plan-approve work=002-link-report >/dev/null
+check "plan-approve stores a sum per covered requirement" '[ $(grep -c "\"cover\.002-link-report\.R[56]\": \"[0-9]* [0-9]*\"" "$SF") -eq 2 ] && ! grep -q "cover\.002-link-report\.R[1-4]" "$SF" && jsonok "$SF"'
+spec_edit '/^### Requirement: R1 /{skip=1} /^### Requirement: R2 /{skip=0} !skip{sub(/^retired: \[\]$/, "retired: [R1]"); print}'; out=$(st link-report stale); code=$?
+check "retiring an uncovered requirement leaves plan, build and review not stale [status-state#R4.S1]" '[ $code -eq 0 ] && [ -z "$out" ]'
+spec_edit '/^## Purpose/{print; getline; print "A changed word. " $0; next} {print}'; out=$(st link-report stale)
+check "a Purpose edit makes nothing stale [status-state#R4.S3]" '[ -z "$out" ] && grep -q "^A changed word" "$W/specs/link-report.md"'
+spec_edit '{print} /^### Requirement: R5 /{print "#### Scenario: S3 New"; print "- **THEN** more"}'; out=$(st link-report stale)
+st link-report plan-approve work=002-link-report >/dev/null; out2=$(st link-report stale); out3=$(st link-report plan-approve work=002-link-report)
+check "a covered requirement gaining a scenario makes the plan stale until plan-approve [status-state#R4.S2]" '[ "$out" = 002-link-report ] && [ -z "$out2" ] && [ $(grep -c "\"type\":\"plan.approved\"" "$W/events.jsonl") -eq 2 ] && [ "$out3" = "002-link-report is already approved" ]'
+spec_edit '/^Source: JIRA-517/{print "Source: JIRA-999"; next} {print}'; out=$(st link-report stale)
+check "a Source: line or spacing change makes nothing stale" '[ -z "$out" ]'
+spec_edit '/^### Requirement: R6 /{skip=1} /^## Code/{skip=0} !skip{print}'; out=$(st link-report stale)
+check "a covered requirement retired makes the plan stale" '[ "$out" = 002-link-report ]'
+rm -rf "$tmp"
+# Migrate: the test fixture, then a copy of this repo's own workspace (local only, so skipped where there is none).
+mg() { FACTREE_HOME="$1" bash "$ST" migrate >/dev/null 2>&1; }
+tmp=$(mktemp -d); W="$tmp/.factree"; cp -R tests/fixtures/workspace "$W"; ev=$(cksum < "$W/events.jsonl"); mg "$W"; code=$?
+check "migrate on a copy of the test fixture writes one state file per spec [status-state#R6.S1]" '[ $code -eq 0 ] && [ "$(ls "$W/state")" = link-report.json ] && jsonok "$W/state/link-report.json" && [ "$ev" = "$(cksum < "$W/events.jsonl")" ]'
+check "migrate maps files and events, and snapshots only plans not stale today" 'SF="$W/state/link-report.json"; grep -q "\"spec\": \"approved\"" "$SF" && grep -q "\"plan\": \"002-link-report\"" "$SF" && grep -q "\"plan.001-link-report\": \"approved\"" "$SF" && grep -q "\"cover.002-link-report.R5\"" "$SF" && ! grep -q "cover.001-link-report.R" "$SF" && grep -q "\"cover.001-link-report.stale\"" "$SF" && [ "$(st link-report stale)" = 001-link-report ]'
+rm -rf "$tmp"
+sw; out=$(st link-report plan-approve work=002-link-report); code=$?
+check "plan-approve on an unmigrated workspace succeeds" '[ $code -eq 0 ] && grep -q "\"plan.002-link-report\": \"approved\"" "$SF" && grep -q "^status: approved$" "$WK/plan.md" && grep -q "cover.002-link-report.R6" "$SF"'
+rm -rf "$tmp"
+tmp=$(mktemp -d); W="$tmp/.factree"; cp -R tests/fixtures/workspace "$W"; cp -R tests/fixtures/workspace "$tmp/m"; mg "$tmp/m"
+out=$(st link-report plan-approve work=002-link-report); code=$?
+check "an unmigrated plan approved on disk answers already approved" '[ $code -eq 0 ] && [ "$out" = "002-link-report is already approved" ] && [ ! -f "$W/state/link-report.json" ]'
+st link-report hold work=002-link-report stage=build reason=x >/dev/null
+check "a move on a spec with no state file seeds it like migrate" '[ "$(grep -v -e "\"seq\"" -e "hold" "$W/state/link-report.json")" = "$(grep -v "\"seq\"" "$tmp/m/state/link-report.json")" ] && grep -q "\"seq\": \"1\"" "$W/state/link-report.json"'
+rm -rf "$tmp"
+own="$(cd "$(git rev-parse --git-common-dir)/.." && pwd)/.factree"
+if [ -d "$own/specs" ]; then
+  tmp=$(mktemp -d); W="$tmp/.factree"; mkdir -p "$W"; cp -R "$own/specs" "$own/work" "$own/events.jsonl" "$W/"
+  n=$(ls "$W/specs"/*.md | wc -l | tr -d " "); mg "$W"; code=$?; m=$(ls "$W/state"/*.json | wc -l | tr -d " ")
+  check "migrate on this repo's workspace writes one state file per spec ($n) [status-state#R6.S1]" '[ $code -eq 0 ] && [ "$m" = "$n" ] && for f in "$W/state"/*.json; do jsonok "$f" || exit 1; done'
+  check "after migrate, releases reads approved and build-status 064 is not stale [status-state#R6.S1]" 'grep -q "\"spec\": \"approved\"" "$W/state/releases.json" && ! st build-status stale | grep -q 064-build-status'
+  before=$(cksum "$W/state"/*.json "$W/events.jsonl" "$W/specs"/*.md); mg "$W"
+  check "migrate twice changes nothing [status-state#R6.S2]" '[ "$before" = "$(cksum "$W/state"/*.json "$W/events.jsonl" "$W/specs"/*.md)" ]'
+  rm -rf "$tmp"
+else echo "skip migrate on this repo's workspace: none at $own"; fi
 check "state.sh stays under 300 lines" '[ $(wc -l < "$ST") -lt 300 ]'
 
 echo "# releases"
