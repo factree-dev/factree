@@ -520,6 +520,12 @@ rm -rf "$tmp"
 rtmp() { tmp=$(mktemp -d); mkdir -p "$tmp/.factree/work"; cp -R tests/validate-plan/verticals/plan "$tmp/.factree/work/007-widget-export"; wstate "$tmp/.factree"; }
 tdr() { FACTREE_HOME="$tmp/.factree" bash "$TD" 007-widget-export T2 abc1234 60 "npm test" 2>&1; echo "rc=$?"; }
 t2open() { awk "/^### T2:/{f=1;next} /^### /{f=0} f" "$tmp/.factree/work/007-widget-export/"*/tasks.md | grep -q "^- \[ \]"; }
+rtmp; rvs "$tmp" T2; rv "$tmp" T2 pass; out=$(FACTREE_HOME="$tmp/.factree" bash "$TD" 007-widget-export T2 0123456 60 "npm test" 2>&1)
+check "a numeric commit stays a quoted string in a valid event line [status-state#R7.S2]" 'grep "\"type\":\"task.done\"" "$tmp/.factree/events.jsonl" | grep -q "\"commit\":\"0123456\",\"lines\":60,"'
+rm -rf "$tmp"
+rtmp; rvs "$tmp" T2; rv "$tmp" T2 pass; rm -rf "$tmp/.factree/state"; FACTREE_HOME="$tmp/.factree" bash "$ST" widget-export write >/dev/null; out=$(tdr)
+check "a refused move passes state.sh's exit code and leaves the steps unticked [status-state#R7.S2]" 'echo "$out" | grep -q "rc=3" && ! echo "$out" | grep -q "^T2 done" && t2open'
+rm -rf "$tmp"
 rtmp; rvs "$tmp" T2; rv "$tmp" T2 pass; out=$(tdr)
 check "task-done.sh moves the state's count by one [status-state#R7.S2]" 'grep -q "\"tasks.007-widget-export\": \"T2\"" "$tmp/.factree/state/widget-export.json" && grep -q "\"plan.007-widget-export\": \"building\"" "$tmp/.factree/state/widget-export.json" && grep -q "\"type\":\"task.done\".*\"move\":\"task-done\"" "$tmp/.factree/events.jsonl"'
 check "reviewed and passing is marked [parallel-build#R5.S1]" 'echo "$out" | grep -q "^T2 done$" && echo "$out" | grep -q "rc=0" && ! t2open'

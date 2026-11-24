@@ -47,7 +47,7 @@ for arg in "$@"; do
     *)
       case "$v" in *'"'*|*\\*|*"
 "*) echo "$k may not hold \" or \\ or a line break" >&2; exit 3 ;; esac
-      case "$v" in ""|*[!0-9]*) extra="$extra,\"$k\":\"$v\"" ;; *) extra="$extra,\"$k\":$v" ;; esac ;;
+      case "$k:$v" in lines:*|seq:*|total:*|tasks:*) case "$v" in ""|*[!0-9]*) extra="$extra,\"$k\":\"$v\"" ;; *) extra="$extra,\"$k\":$v" ;; esac ;; *) extra="$extra,\"$k\":\"$v\"" ;; esac ;;
   esac
 done
 case "$stage" in *[!a-z]*) echo "stage must be one lowercase word: $stage" >&2; exit 3 ;; esac

@@ -28,15 +28,6 @@ case "$last" in
 esac
 grep "\"type\":\"agent.started\",\"work\":\"$work\"" "$root/events.jsonl" 2>/dev/null | grep -q "\"role\":\"review\",\"task\":\"$task\"" || { echo "$task has no reviewer subagent" >&2; exit 3; }
 
-# Tick every step of this task, and only this task.
-tmp="$file.$$"
-awk -v T="### $task:" '
-  index($0, T) == 1 { inside = 1; print; next }
-  /^### / { inside = 0 }
-  inside && /^- \[ \] / { sub(/^- \[ \] /, "- [x] ") }
-  { print }' "$file" > "$tmp" && mv "$tmp" "$file"
-
-. "$here/lib.sh"
 # The repo the task works in (plan-repos.sh: "." for a single-repo workspace) [multi-repo#R3.S4].
 repo=$(bash "$here/plan-repos.sh" "$dir" 2>/dev/null | awk -F'\t' -v t="$task" '$1 == t { print $2 }')
 # The move goes through state.sh, the one writer (status-state R7); it logs task.done. Its values can't hold " or \.
@@ -44,7 +35,14 @@ head="$dir/plan.md"; [ -f "$head" ] || head="$dir/tasks.md"
 spec=$(awk 'NR == 1 && $0 == "---" { fm = 1; next } fm && $0 == "---" { exit } fm && /^spec:/ { sub(/^spec:[ ]*/, ""); sub(/[ #].*/, ""); print; exit }' "$head" 2>/dev/null)
 [ -n "$spec" ] || { echo "no spec: in the front matter of $head" >&2; exit 1; }
 clean() { printf '%s' "$1" | tr -d '"\\' | tr '\n' ' '; }
-bash "$here/state.sh" "$spec" task-done work="$work" task="$task" commit="$(clean "$commit")" lines="$lines" tests="$(clean "$tests")" repo="$(clean "${repo:-.}")" >/dev/null || exit 1
+bash "$here/state.sh" "$spec" task-done work="$work" task="$task" commit="$(clean "$commit")" lines="$lines" tests="$(clean "$tests")" repo="$(clean "${repo:-.}")" >/dev/null; rc=$?; [ $rc -eq 0 ] || exit $rc
+# Tick every step of this task, and only this task.
+tmp="$file.$$"
+awk -v T="### $task:" '
+  index($0, T) == 1 { inside = 1; print; next }
+  /^### / { inside = 0 }
+  inside && /^- \[ \] / { sub(/^- \[ \] /, "- [x] ") }
+  { print }' "$file" > "$tmp" && mv "$tmp" "$file"
 echo "$task done"
 
 # Implemented when every task in the plan has a task.done event.
