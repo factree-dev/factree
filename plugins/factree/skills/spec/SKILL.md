@@ -28,7 +28,7 @@ This skill writes only files under `.factree/`. It never writes or edits product
 - **If the user replies in the terminal first,** stop the wait before carrying on, and ignore a later report of a decision you already have.
 - **On their next message,** the session hook also passes along any companion decision you haven't had, as "Decided in the Factree companion since your last turn: …". Treat it the same way.
 - Without background commands (another harness), skip the wait; the hook still delivers decisions with the next message.
-- **A spec approved in the companion** is approved like one approved here: carry on as **On approval** says.
+- **A spec approved in the companion** is approved like one approved here: carry on as **On approval** says. If the approval arrives while you're checking (steps 10–11), log no further `spec.step` for that spec and carry on as **On approval** says.
 
 **The flow runs on its own** (factory-flow): Factree is a factory. Once nothing needs the user, go straight on to the next stage in the same session, saying one line as it starts ("Planning link-report."). Stop only for a decision brief, an approval the user must give, or a failed or blocked task; never to ask whether to start the next stage. Never push, open a pull request or merge. With `flow: step` in the preferences, stop after this stage instead and say which comes next.
 

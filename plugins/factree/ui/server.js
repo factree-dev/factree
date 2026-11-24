@@ -87,11 +87,13 @@ function liveFor(specId, spec, events, sessions, now = Date.now()) {
 		pendingQuestion: pending,
 		pending: open ? all.filter((q) => q.answer === void 0) : [],
 		answered: open ? all.filter((q) => q.answer !== void 0) : [],
-		session: open ? sessionFor(lastAny?.cwd, sessions) : null
+		session: open ? sessionFor(lastAny?.cwd, sessions) : null,
+		reopened: runEvents.some((e) => e.type === "question.asked" || e.type === "spec.updated")
 	};
 }
 /** What the UI shows for a spec (spec-status R2–R5). */
 function displayStatus(fileStatus, live, lastMoved, now) {
+	if ((fileStatus === "approved" || fileStatus === "live") && !live.reopened) return fileStatus;
 	if (live.open) {
 		const working = live.session?.state === "working";
 		if ((live.pendingQuestion || live.step === "approval" || live.session?.state === "waiting") && !working) return "needs_you";

@@ -175,6 +175,12 @@ Every case must also pass:
 **Setup:** the Factree UI running. Get to "Approve this spec?" and approve it in the companion instead of replying.
 **Expect:** with nothing typed, Claude says the spec was approved and starts the plan for it.
 
+## Approved mid-check [spec-status#R2.S1]
+
+**Setup:** the Factree UI running; a spec in steps 10–11 (checking, presenting) when its companion approval arrives. Watch `.factree/events.jsonl` for the 2 s after it.
+**Expect:** no `spec.step` is logged for that spec after the approval; Claude sets `approved` as its On approval step says and goes straight on to planning, saying "Planning <spec-id>."
+**Before the change:** the releases spec read "Writing · 4%" after steps logged 2 s after its companion approval (O4).
+
 ## Woken by a companion decision [companion-decisions#R8.S1]
 
 **Setup:** the Factree UI running; a session that has asked a question and started `wait-decision.sh <spec>` in the background, then gone idle. Make the decision from somewhere Claude Code isn't tracking (the companion, or a detached `curl` to `/api/decisions`).

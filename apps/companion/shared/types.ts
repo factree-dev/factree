@@ -93,6 +93,7 @@ export interface Live {
   pending: AskedQuestion[];    // every unanswered question of the open run, oldest first (decisions-view R1)
   answered: AskedQuestion[];
   session: Session | null;     // the Claude Code session doing it, if we can tell
+  reopened?: boolean;          // the run after the last approval asked a question or updated the spec, so it is a real re-edit (spec-status R1)
 }
 
 // What Claude is doing on a spec right now, from the newest progress event (live-activity R1–R3).
