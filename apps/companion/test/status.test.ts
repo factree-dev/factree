@@ -3,7 +3,8 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { STATUS_META } from "../src/status.ts";
 import { SpecLink } from "../src/components/Sidebar.tsx";
-import type { SpecSummary } from "../shared/types.ts";
+import type { Live, SpecSummary } from "../shared/types.ts";
+import { displayStatus } from "../server/live.ts";
 
 const statuses = Object.keys(STATUS_META) as (keyof typeof STATUS_META)[];
 
@@ -43,5 +44,21 @@ describe("the spec row", () => {
   it("list icon matches the header while the stage is Plan [spec-status#R9.S2]", () => {
     const html = renderToStaticMarkup(createElement(SpecLink, { s: summary({ plan: approvedPlan }), active: false }));
     expect(html).toContain("class=\"mini-line\"");   // the row shows the spec's line (spec-ring R5)
+  });
+});
+
+const liveRun = (over: Partial<Live> = {}): Live => ({
+  open: true, step: "checking", stepNote: "", steps: [], pendingQuestion: null, pending: [], answered: [],
+  session: { state: "working" } as Live["session"], ...over,
+});
+
+describe("displayStatus", () => {
+  const now = Date.parse("2026-11-24T22:50:10Z");
+  it("approved during checking reads approved [spec-status#R1.S1]", () => {
+    expect(displayStatus("approved", liveRun(), "2026-11-24T22:50:02Z", now)).toBe("approved");
+  });
+
+  it("a re-edit with the file back to draft reads writing [spec-status#R1.S2]", () => {
+    expect(displayStatus("draft", liveRun(), "2026-11-24T22:50:02Z", now)).toBe("writing");
   });
 });

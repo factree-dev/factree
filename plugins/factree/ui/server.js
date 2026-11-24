@@ -92,6 +92,7 @@ function liveFor(specId, spec, events, sessions, now = Date.now()) {
 }
 /** What the UI shows for a spec (spec-status R2–R5). */
 function displayStatus(fileStatus, live, lastMoved, now) {
+	if (fileStatus === "approved" || fileStatus === "live") return fileStatus;
 	if (live.open) {
 		const working = live.session?.state === "working";
 		if ((live.pendingQuestion || live.step === "approval" || live.session?.state === "waiting") && !working) return "needs_you";
