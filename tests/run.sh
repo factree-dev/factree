@@ -260,7 +260,7 @@ rm -rf "$tmp"
 tmp=$(mktemp -d); mkdir -p "$tmp/.factree"
 FACTREE_HOME="$tmp/.factree" bash $EVENT stage.held 063-x '{"stage":"review","reason":"acceptance run"}' 2>/dev/null
 FACTREE_HOME="$tmp/.factree" bash $EVENT stage.released 063-x '{"stage":"review"}' 2>/dev/null
-check "event.sh accepts stage.held and stage.released on the work [build-status#R4.S3]" 'grep -q "\"type\":\"stage.held\"" "$tmp/.factree/events.jsonl" && grep -q "\"type\":\"stage.released\"" "$tmp/.factree/events.jsonl"'
+check "event.sh accepts stage.held and stage.released on the work [build-status#R4.S3]" 'grep -q "\"type\":\"stage.held\",\"work\":\"063-x\"" "$tmp/.factree/events.jsonl" && grep -q "\"type\":\"stage.released\",\"work\":\"063-x\"" "$tmp/.factree/events.jsonl"'
 rm -rf "$tmp"
 
 echo "# lessons"
