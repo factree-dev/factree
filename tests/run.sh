@@ -796,4 +796,28 @@ check "a single-repo plan gets one PR per task and no integration branch [multi-
 check "pr-plan.sh stays under 300 lines [multi-repo#R5]" '[ $(wc -l < $PRP) -lt 300 ]'
 rm -rf "$tmp"
 
+echo "# releases"
+VB="$PWD/tests/version-bump.sh"
+tmp=$(mktemp -d); r="$tmp/r"; mkdir -p "$r/$P/.claude-plugin" "$r/.factree" "$r/tests"
+cp $P/.claude-plugin/plugin.json "$r/$P/.claude-plugin/"; cp README.md "$r/"
+g() { git -C "$r" -c user.name=t -c user.email=t@t "$@"; }
+git -C "$r" init -q -b main; echo a > "$r/$P/x"; g add -A; g commit -qm base
+g checkout -qb change; echo b >> "$r/$P/x"; g commit -qam change
+out=$(cd "$r" && bash "$VB" main 2>&1); code=$?
+check "plugin changed with the version unchanged fails with the message [releases#R2.S1]" '[ $code -eq 1 ] && [ "$out" = "$P changed but the version is still $V; bump it in plugin.json and the README badge" ]'
+sed "s/\"version\": \"$V\"/\"version\": \"99.0.0\"/" "$r/$P/.claude-plugin/plugin.json" > "$tmp/pj"; cp "$tmp/pj" "$r/$P/.claude-plugin/plugin.json"
+sed "s/badge\/version-$V-/badge\/version-99.0.0-/" "$r/README.md" > "$tmp/rd"; cp "$tmp/rd" "$r/README.md"; g commit -qam bump
+out=$(cd "$r" && bash "$VB" main 2>&1); code=$?
+check "plugin changed and the version bumped passes [releases#R2.S2]" '[ $code -eq 0 ]'
+g checkout -q main; g checkout -qb docs; echo c > "$r/.factree/n"; echo d > "$r/tests/t"; g add -A; g commit -qm docs
+out=$(cd "$r" && bash "$VB" main 2>&1); code=$?
+check "only .factree and tests changed passes [releases#R2.S3]" '[ $code -eq 0 ]'
+B=$(sed -n 's/.*badge\/version-\([^-]*\)-.*/\1/p' README.md | head -n1)
+check "README badge matches plugin.json [releases#R3.S1]" '[ "$B" = "$V" ]'
+sed "s/badge\/version-$V-/badge\/version-0.0.1-/" "$r/README.md" > "$tmp/rd"; cp "$tmp/rd" "$r/README.md"
+out=$(cd "$r" && bash "$VB" main 2>&1); code=$?
+check "a stale README badge fails, naming both versions [releases#R3.S1]" '[ $code -eq 1 ] && echo "$out" | grep -q "0.0.1" && echo "$out" | grep -q "$V"'
+check "CLAUDE.md states the versioning rule [releases#R1.S1]" 'grep -q "bumps the version in .plugin.json. and the README badge together" CLAUDE.md'
+rm -rf "$tmp"
+
 exit $fail
