@@ -205,7 +205,9 @@ export interface Plan {
 }
 
 // What the spec list and the Plan stage need: the newest plan, and how many others there are.
-export interface PlanBrief { work: string; status: PlanStatus; approvedAt: string; others: number; tasks: number; done: number; implemented: boolean; review?: ReviewInfo | null; branchReview?: BranchReview | null }
+export interface PlanBrief { work: string; status: PlanStatus; approvedAt: string; others: number; tasks: number; done: number; implemented: boolean; review?: ReviewInfo | null; branchReview?: BranchReview | null; hold?: Hold }
+// A stage the build or review logged as held (stage.held), until stage.released (build-status R4).
+export interface Hold { stage: string; reason: string; since: string }
 // The newest pull request for a plan, from review.* events (review R8). state: OPEN, CHANGES_REQUESTED, APPROVED, MERGED or CLOSED.
 export interface ReviewComment { author: string; path: string; line: string; body: string; handled: string | null }
 // One pull request, keyed by repo and number (multi-repo R9); repo "" is the workspace's only repo.
@@ -226,13 +228,16 @@ export type TaskPhase = "waiting" | "building" | "reviewing" | "fixing" | "merge
 export interface TaskBuild {
   status: TaskBuildStatus; commit?: string; lines?: number; reason?: string;
   phase?: TaskPhase; model?: string; round?: number; cause?: string; verdict?: string; findings?: number; suggestions?: number; reviewerRecorded?: boolean;
+  history?: TaskHistory[];   // reviews and fix rounds in order (build-status R2)
 }
+export type TaskHistory = { kind: "review"; verdict: string; findings: number; suggestions: number } | { kind: "fix"; round: number; cause: string };
 // The whole-branch review of the plan's latest run (build-visibility R3): probing until branch.reviewed ends it.
 export interface BranchReview {
   phase: "probing" | "fixing" | "ended";
   findings: { severity: string; text: string; evidence: string }[];
   notProbed: { area: string; reason: string }[];
   rounds: { round: number; cause: string }[];
+  passes: { findings: { severity: string; text: string; evidence: string }[]; fix?: { round: number; cause: string } }[];   // every review pass, with the fix round after it (build-status R3)
   verdict: string; must: number; should: number;
 }
 

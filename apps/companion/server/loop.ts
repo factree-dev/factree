@@ -1,7 +1,7 @@
 // Plans and the loop's state for a spec: its plans and their build, newest plan, verify result, pull request, stale stages
 // and round (specs plan-view, build, verify, review, spec-ring R4).
 
-import type { FactreeEvent, Plan, PlanBrief, Session, Spec, TaskBuild, VerifyCounts, VerifyResult, ReviewInfo, PullRequest, LoopState, BranchReview } from "../shared/types.ts";
+import type { Hold, FactreeEvent, Plan, PlanBrief, Session, Spec, TaskBuild, VerifyCounts, VerifyResult, ReviewInfo, PullRequest, LoopState, BranchReview } from "../shared/types.ts";
 import { readdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { parsePlan, type PlanFiles } from "./parse-plan.ts";
@@ -44,7 +44,19 @@ export function brief(plans: Plan[], events: FactreeEvent[] = []): PlanBrief | n
   const builds = Object.values(p.build);
   return { work: p.work, status: p.status, approvedAt: p.approvedAt, others: plans.length - 1,
     tasks: builds.length, done: builds.filter((b) => b.status === "done").length, implemented: Boolean(p.implementedAt),
-    review: reviewOf(p.work, events), ...(p.branchReview ? { branchReview: p.branchReview } : {}) };
+    review: reviewOf(p.work, events), ...(p.branchReview ? { branchReview: p.branchReview } : {}), ...holdFor(p.work, events) };
+}
+
+/** The work's current hold (build-status R4, D3): the last stage.held, cleared by a stage.released for that stage;
+ *  a release with no hold before it changes nothing. */
+function holdFor(work: string, events: FactreeEvent[]): { hold?: Hold } {
+  let hold: Hold | null = null;
+  for (const e of events) {
+    if (e.work !== work) continue;
+    if (e.type === "stage.held") hold = { stage: String(e.data.stage ?? ""), reason: String(e.data.reason ?? ""), since: e.ts };
+    else if (e.type === "stage.released" && hold && e.data.stage === hold.stage) hold = null;
+  }
+  return hold ? { hold } : {};
 }
 
 /** The plan's pull requests, keyed by repo and number (multi-repo R9): state and comments with how each was handled
@@ -131,11 +143,20 @@ export function buildStatus(plan: Plan, events: FactreeEvent[]): Record<string, 
       else if (role === "review") out[id] = { ...b, phase: "reviewing", reviewerRecorded: true };
     }
     else if (e.type === "task.waiting") out[id] = { ...b, phase: "waiting", reason: String(e.data.reason ?? "") };
-    else if (e.type === "task.fixing") out[id] = { ...b, phase: "fixing", round: Number(e.data.round ?? 0), cause: String(e.data.cause ?? ""), reviewerRecorded: false };
+    else if (e.type === "task.fixing") {
+      const round = Number(e.data.round ?? 0), cause = String(e.data.cause ?? ""), history = b.history ?? [];
+      out[id] = { ...b, phase: "fixing", round, cause, reviewerRecorded: false, history: history.some((h) => h.kind === "fix" && h.round === round) ? history : [...history, { kind: "fix", round, cause }] };
+    }
     else if (e.type === "task.reviewed") {
       const fs = Array.isArray(e.data.findings) ? (e.data.findings as { beyond_sources?: boolean }[]) : [];
-      if (e.data.round !== undefined) out[id] = { ...b, round: Number(e.data.round), cause: String(e.data.cause ?? "") };   // after a fix round: the re-review's mark
-      else out[id] = { ...b, verdict: `${String(e.data.spec ?? "")}/${String(e.data.quality ?? "")}`, findings: fs.filter((f) => !f.beyond_sources).length, suggestions: fs.filter((f) => f.beyond_sources).length };
+      const history = b.history ?? [];
+      if (e.data.spec === undefined && e.data.quality === undefined) {   // an old fix-round marker: no verdict (build-status D3)
+        const round = Number(e.data.round ?? 0);
+        out[id] = { ...b, round, cause: String(e.data.cause ?? ""), history: history.some((h) => h.kind === "fix" && h.round === round) ? history : [...history, { kind: "fix", round, cause: String(e.data.cause ?? "") }] };
+      } else {
+        const findings = fs.filter((f) => !f.beyond_sources).length, suggestions = fs.filter((f) => f.beyond_sources).length, verdict = `${String(e.data.spec ?? "")}/${String(e.data.quality ?? "")}`;
+        out[id] = { ...b, verdict, findings, suggestions, history: [...history, { kind: "review", verdict, findings, suggestions }] };
+      }
     }
     else if (e.type === "task.started") out[id] = { ...b, status: "running", phase: "building" };
     else if (e.type === "task.done") out[id] = { ...b, status: "done", phase: "merged", commit: String(e.data.commit ?? ""), lines: Number(e.data.lines ?? 0) };
@@ -150,7 +171,7 @@ export function buildStatus(plan: Plan, events: FactreeEvent[]): Record<string, 
  *  self-review step (with any findings after it) stays a run only if a branch reviewer, fix round or branch.reviewed
  *  comes next, or it is the newest and still inside the paused window (R1.S5). */
 export function branchReviewOf(work: string, events: FactreeEvent[], now: number = Date.now()): BranchReview | null {
-  const fresh = (phase: BranchReview["phase"]): BranchReview => ({ phase, findings: [], notProbed: [], rounds: [], verdict: "", must: 0, should: 0 });
+  const fresh = (phase: BranchReview["phase"]): BranchReview => ({ phase, findings: [], notProbed: [], rounds: [], passes: [], verdict: "", must: 0, should: 0 });
   let br: BranchReview | null = null;
   let pending: { since: string; before: BranchReview | null } | null = null;   // a self-review step nothing branch-era has followed yet
   for (const e of events) {
@@ -169,15 +190,18 @@ export function branchReviewOf(work: string, events: FactreeEvent[], now: number
     } else if (e.type === "task.reviewed" && branch) {
       if (!br || br.phase === "ended") continue;   // no run open: an older build's findings, which never ended a run
       br.phase = "probing";
-      if (d.round !== undefined) { if (!br.rounds.some((r) => r.round === Number(d.round))) br.rounds.push({ round: Number(d.round), cause: String(d.cause ?? "") }); }
+      if (d.round !== undefined && !Array.isArray(d.findings)) { if (!br.rounds.some((r) => r.round === Number(d.round))) br.rounds.push({ round: Number(d.round), cause: String(d.cause ?? "") }); }   // an old marker
       else {
         br.findings = (Array.isArray(d.findings) ? d.findings as Record<string, unknown>[] : []).map((f) => ({ severity: String(f.severity ?? ""), text: String(f.text ?? ""), evidence: String(f.evidence ?? "") }));
+        if (Array.isArray(d.findings)) br.passes.push({ findings: br.findings });   // each review with a findings array is a pass (build-status D3)
         br.notProbed = (Array.isArray(d.not_probed) ? d.not_probed as Record<string, unknown>[] : []).map((n) => ({ area: String(n.area ?? ""), reason: String(n.reason ?? "") }));
       }
     } else if (e.type === "task.fixing" && branch) {
       br ??= fresh("fixing");
       br.phase = "fixing";
       br.rounds = [...br.rounds.filter((r) => r.round !== Number(d.round)), { round: Number(d.round ?? 0), cause: String(d.cause ?? "") }];
+      const last = br.passes[br.passes.length - 1];
+      if (last) last.fix = { round: Number(d.round ?? 0), cause: String(d.cause ?? "") };
     } else if (e.type === "branch.reviewed") {
       br = { ...(br ?? fresh("ended")), phase: "ended", verdict: String(d.verdict ?? ""), must: Number(d.must ?? 0), should: Number(d.should ?? 0) };
     }

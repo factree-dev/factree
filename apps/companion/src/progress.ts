@@ -3,7 +3,7 @@
 
 import type { Activity, Spec, SpecSummary } from "../shared/types.ts";
 import { STALE, UP_NEXT, NOT_STARTED } from "./words.ts";
-import { planStage, buildStage, verifyStage, reviewStage, toHandle } from "./stages.ts";
+import { planStage, buildStage, verifyStage, reviewStage, toHandle, heldSub } from "./stages.ts";
 import { activityText } from "./status.ts";
 import { VERIFY_ON } from "./features.ts";
 
@@ -58,7 +58,7 @@ export function progressOf(s: SpecSummary, spec: Spec | null, waiting = 0, verif
       : fills[i]! >= 1 ? "done"
       : i === currentIdx ? (waiting > 0 || s.activity?.asking || (key === "review" && reviewWaits) ? "waiting" : running === key || (key === "review" && reviewOpen) ? "running" : "idle")
       : fills[i]! > 0 ? "done" : "idle";
-    const sub = stale[i] ? STALE : i === currentIdx && NOT_STARTED.has(subs[i]!) ? UP_NEXT : subs[i]!;
+    const sub = stale[i] ? STALE : heldSub(s, key) ?? (i === currentIdx && NOT_STARTED.has(subs[i]!) ? UP_NEXT : subs[i]!);
     return { key, name: names[i]!, fill: stale[i] ? 1 : Math.round(fills[i]! * 100) / 100, state, href: hrefs[i] ?? null, sub };
   });
   // Stale stages don't count: the percentage is this round's progress.

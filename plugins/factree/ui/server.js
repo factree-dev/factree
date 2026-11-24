@@ -1175,8 +1175,24 @@ function brief(plans, events = []) {
 		done: builds.filter((b) => b.status === "done").length,
 		implemented: Boolean(p.implementedAt),
 		review: reviewOf(p.work, events),
-		...p.branchReview ? { branchReview: p.branchReview } : {}
+		...p.branchReview ? { branchReview: p.branchReview } : {},
+		...holdFor(p.work, events)
 	};
+}
+/** The work's current hold (build-status R4, D3): the last stage.held, cleared by a stage.released for that stage;
+*  a release with no hold before it changes nothing. */
+function holdFor(work, events) {
+	let hold = null;
+	for (const e of events) {
+		if (e.work !== work) continue;
+		if (e.type === "stage.held") hold = {
+			stage: String(e.data.stage ?? ""),
+			reason: String(e.data.reason ?? ""),
+			since: e.ts
+		};
+		else if (e.type === "stage.released" && hold && e.data.stage === hold.stage) hold = null;
+	}
+	return hold ? { hold } : {};
 }
 /** The plan's pull requests, keyed by repo and number (multi-repo R9): state and comments with how each was handled
 *  (review R8). No repo means the workspace's only repo. The top-level fields are the newest pull request's. */
@@ -1304,26 +1320,50 @@ function buildStatus(plan, events) {
 			phase: "waiting",
 			reason: String(e.data.reason ?? "")
 		};
-		else if (e.type === "task.fixing") out[id] = {
-			...b,
-			phase: "fixing",
-			round: Number(e.data.round ?? 0),
-			cause: String(e.data.cause ?? ""),
-			reviewerRecorded: false
-		};
-		else if (e.type === "task.reviewed") {
+		else if (e.type === "task.fixing") {
+			const round = Number(e.data.round ?? 0), cause = String(e.data.cause ?? ""), history = b.history ?? [];
+			out[id] = {
+				...b,
+				phase: "fixing",
+				round,
+				cause,
+				reviewerRecorded: false,
+				history: history.some((h) => h.kind === "fix" && h.round === round) ? history : [...history, {
+					kind: "fix",
+					round,
+					cause
+				}]
+			};
+		} else if (e.type === "task.reviewed") {
 			const fs = Array.isArray(e.data.findings) ? e.data.findings : [];
-			if (e.data.round !== void 0) out[id] = {
-				...b,
-				round: Number(e.data.round),
-				cause: String(e.data.cause ?? "")
-			};
-			else out[id] = {
-				...b,
-				verdict: `${String(e.data.spec ?? "")}/${String(e.data.quality ?? "")}`,
-				findings: fs.filter((f) => !f.beyond_sources).length,
-				suggestions: fs.filter((f) => f.beyond_sources).length
-			};
+			const history = b.history ?? [];
+			if (e.data.spec === void 0 && e.data.quality === void 0) {
+				const round = Number(e.data.round ?? 0);
+				out[id] = {
+					...b,
+					round,
+					cause: String(e.data.cause ?? ""),
+					history: history.some((h) => h.kind === "fix" && h.round === round) ? history : [...history, {
+						kind: "fix",
+						round,
+						cause: String(e.data.cause ?? "")
+					}]
+				};
+			} else {
+				const findings = fs.filter((f) => !f.beyond_sources).length, suggestions = fs.filter((f) => f.beyond_sources).length, verdict = `${String(e.data.spec ?? "")}/${String(e.data.quality ?? "")}`;
+				out[id] = {
+					...b,
+					verdict,
+					findings,
+					suggestions,
+					history: [...history, {
+						kind: "review",
+						verdict,
+						findings,
+						suggestions
+					}]
+				};
+			}
 		} else if (e.type === "task.started") out[id] = {
 			...b,
 			status: "running",
@@ -1354,6 +1394,7 @@ function branchReviewOf(work, events, now = Date.now()) {
 		findings: [],
 		notProbed: [],
 		rounds: [],
+		passes: [],
 		verdict: "",
 		must: 0,
 		should: 0
@@ -1384,7 +1425,7 @@ function branchReviewOf(work, events, now = Date.now()) {
 		} else if (e.type === "task.reviewed" && branch) {
 			if (!br || br.phase === "ended") continue;
 			br.phase = "probing";
-			if (d.round !== void 0) {
+			if (d.round !== void 0 && !Array.isArray(d.findings)) {
 				if (!br.rounds.some((r) => r.round === Number(d.round))) br.rounds.push({
 					round: Number(d.round),
 					cause: String(d.cause ?? "")
@@ -1395,6 +1436,7 @@ function branchReviewOf(work, events, now = Date.now()) {
 					text: String(f.text ?? ""),
 					evidence: String(f.evidence ?? "")
 				}));
+				if (Array.isArray(d.findings)) br.passes.push({ findings: br.findings });
 				br.notProbed = (Array.isArray(d.not_probed) ? d.not_probed : []).map((n) => ({
 					area: String(n.area ?? ""),
 					reason: String(n.reason ?? "")
@@ -1407,6 +1449,11 @@ function branchReviewOf(work, events, now = Date.now()) {
 				round: Number(d.round ?? 0),
 				cause: String(d.cause ?? "")
 			}];
+			const last = br.passes[br.passes.length - 1];
+			if (last) last.fix = {
+				round: Number(d.round ?? 0),
+				cause: String(d.cause ?? "")
+			};
 		} else if (e.type === "branch.reviewed") br = {
 			...br ?? fresh("ended"),
 			phase: "ended",
