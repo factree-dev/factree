@@ -257,6 +257,11 @@ tmp=$(mktemp -d); mkdir -p "$tmp/.factree"
 for t in task.reviewed bug.escaped lesson.proposed lesson.approved lesson.rejected; do FACTREE_HOME="$tmp/.factree" bash $EVENT $t demo '{"key":"x"}' 2>/dev/null; done
 check "event.sh accepts the learning events [self-improving#R2.S1]" '[ $(grep -c "\"type\":\"\(task.reviewed\|bug.escaped\|lesson.proposed\|lesson.approved\|lesson.rejected\)\"" "$tmp/.factree/events.jsonl" 2>/dev/null) -eq 5 ]'
 rm -rf "$tmp"
+tmp=$(mktemp -d); mkdir -p "$tmp/.factree"
+FACTREE_HOME="$tmp/.factree" bash $EVENT stage.held 063-x '{"stage":"review","reason":"acceptance run"}' 2>/dev/null
+FACTREE_HOME="$tmp/.factree" bash $EVENT stage.released 063-x '{"stage":"review"}' 2>/dev/null
+check "event.sh accepts stage.held and stage.released on the work [build-status#R4.S3]" 'grep -q "\"type\":\"stage.held\",\"work\":\"063-x\"" "$tmp/.factree/events.jsonl" && grep -q "\"type\":\"stage.released\",\"work\":\"063-x\"" "$tmp/.factree/events.jsonl"'
+rm -rf "$tmp"
 
 echo "# lessons"
 LS="$(pwd)/$P/scripts/lessons.sh"
