@@ -1,7 +1,7 @@
 // Plans and the loop's state for a spec: its plans and their build, newest plan, verify result, pull request, stale stages
 // and round (specs plan-view, build, verify, review, spec-ring R4).
 
-import type { FactreeEvent, Plan, PlanBrief, Session, Spec, TaskBuild, VerifyCounts, VerifyResult, ReviewInfo, PullRequest, LoopState, BranchReview } from "../shared/types.ts";
+import type { Hold, FactreeEvent, Plan, PlanBrief, Session, Spec, TaskBuild, VerifyCounts, VerifyResult, ReviewInfo, PullRequest, LoopState, BranchReview } from "../shared/types.ts";
 import { readdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { parsePlan, type PlanFiles } from "./parse-plan.ts";
@@ -44,7 +44,19 @@ export function brief(plans: Plan[], events: FactreeEvent[] = []): PlanBrief | n
   const builds = Object.values(p.build);
   return { work: p.work, status: p.status, approvedAt: p.approvedAt, others: plans.length - 1,
     tasks: builds.length, done: builds.filter((b) => b.status === "done").length, implemented: Boolean(p.implementedAt),
-    review: reviewOf(p.work, events), ...(p.branchReview ? { branchReview: p.branchReview } : {}) };
+    review: reviewOf(p.work, events), ...(p.branchReview ? { branchReview: p.branchReview } : {}), ...holdFor(p.work, events) };
+}
+
+/** The work's current hold (build-status R4, D3): the last stage.held, cleared by a stage.released for that stage;
+ *  a release with no hold before it changes nothing. */
+function holdFor(work: string, events: FactreeEvent[]): { hold?: Hold } {
+  let hold: Hold | null = null;
+  for (const e of events) {
+    if (e.work !== work) continue;
+    if (e.type === "stage.held") hold = { stage: String(e.data.stage ?? ""), reason: String(e.data.reason ?? ""), since: e.ts };
+    else if (e.type === "stage.released" && hold && e.data.stage === hold.stage) hold = null;
+  }
+  return hold ? { hold } : {};
 }
 
 /** The plan's pull requests, keyed by repo and number (multi-repo R9): state and comments with how each was handled
