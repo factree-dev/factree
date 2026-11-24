@@ -796,6 +796,41 @@ check "a single-repo plan gets one PR per task and no integration branch [multi-
 check "pr-plan.sh stays under 300 lines [multi-repo#R5]" '[ $(wc -l < $PRP) -lt 300 ]'
 rm -rf "$tmp"
 
+echo "# state"
+ST="$(pwd)/$P/scripts/state.sh"
+# A workspace with spec link-report (draft) and plan 002-link-report (draft, 5 tasks).
+sw() { tmp=$(mktemp -d); W="$tmp/.factree"; WK="$W/work/002-link-report"; SF="$W/state/link-report.json"; mkdir -p "$W/specs" "$WK/backend"; : > "$W/events.jsonl"
+  sed 's/^status: approved$/status: draft/' tests/fixtures/workspace/specs/link-report.md > "$W/specs/link-report.md"
+  sed 's/^status: approved$/status: draft/' tests/fixtures/workspace/work/002-link-report/plan.md > "$WK/plan.md"
+  for n in 1 2 3 4 5; do printf '### T%s: task %s\n' $n $n; done > "$WK/backend/tasks.md"; }
+st() { FACTREE_HOME="$W" bash "$ST" "$@" 2>&1; }
+snap() { cksum "$SF" "$W/events.jsonl" "$W/specs/link-report.md" "$WK/plan.md"; }
+jsonok() { awk '{ L[NR] = $0 } END { if (L[1] != "{" || L[NR] != "}") exit 1; for (i = 2; i < NR - 1; i++) if (L[i] !~ /^  "[^"]+": "[^"]*",$/) exit 1; if (L[NR-1] !~ /^  "[^"]+": "[^"]*"$/) exit 1 }' "$1"; }
+sw; st link-report write >/dev/null; out=$(st link-report approve by="flow: no open decisions"); code=$?
+check "approve from writing records approved, the spec's status line and spec.approved [status-state#R2.S1]" '[ $code -eq 0 ] && grep -q "\"spec\": \"approved\"" "$SF" && grep -q "^status: approved$" "$W/specs/link-report.md" && grep -q "\"type\":\"spec.approved\",\"spec\":\"link-report\".*\"by\":\"flow: no open decisions\"" "$W/events.jsonl" && jsonok "$SF"'
+before=$(snap); out=$(st link-report approve); code=$?
+check "approve twice: no change, 'already approved', exit 0 [status-state#R2.S3]" '[ $code -eq 0 ] && [ "$out" = "link-report is already approved" ] && [ "$before" = "$(snap)" ]'
+FACTREE_HOME="$W" bash $EVENT spec.step link-report '{"step":"checking"}'
+check "a spec.step after approve leaves it approved [status-state#R3.S1]" 'st link-report show | grep -q "\"spec\": \"approved\""'
+st link-report plan work=002-link-report >/dev/null; st link-report plan-approve work=002-link-report >/dev/null
+check "plan-approve sets the plan approved and its status line" 'grep -q "\"plan.002-link-report\": \"approved\"" "$SF" && grep -q "^status: approved$" "$WK/plan.md" && grep -q "\"type\":\"plan.approved\",\"work\":\"002-link-report\"" "$W/events.jsonl"'
+before=$(snap); out=$(st link-report implemented work=002-link-report); code=$?
+check "implemented with 0 of 5 tasks done prints the reason, changes nothing, exit 3 [status-state#R2.S2]" '[ $code -eq 3 ] && [ "$out" = "002-link-report can'"'"'t be implemented: 0 of 5 tasks done" ] && [ "$before" = "$(snap)" ]'
+for t in T1 T2 T3 T4 T5; do st link-report task-done work=002-link-report task=$t >/dev/null; done; out=$(st link-report task-done work=002-link-report task=T2)
+check "task-done counts each task once" '[ "$out" = "T2 is already done in 002-link-report" ] && grep -q "\"tasks.002-link-report\": \"T1 T2 T3 T4 T5\"" "$SF" && grep -q "\"total.002-link-report\": \"5\"" "$SF" && st link-report implemented work=002-link-report >/dev/null && grep -q "\"plan.002-link-report\": \"implemented\"" "$SF"'
+st link-report hold stage=review reason="acceptance run on SHORT-43" >/dev/null; held=$(cat "$SF"); st link-report release stage=review >/dev/null
+check "hold then release per work [status-state#R3.S3]" 'echo "$held" | grep -q "\"hold.002-link-report\": \"review acceptance run on SHORT-43\"" && echo "$held" | grep -q "\"hold_since.002-link-report\": \"20" && ! grep -q "hold" "$SF" && grep -q "\"type\":\"stage.released\",\"work\":\"002-link-report\"" "$W/events.jsonl"'
+before=$(snap); out=$(st link-report hold stage=review 'reason=a"b'); code=$?
+check "a value with \" is refused, naming the field" '[ $code -eq 3 ] && echo "$out" | grep -q "reason" && [ "$before" = "$(snap)" ]'
+rm -rf "$tmp"
+sw; st link-report write >/dev/null; for w in a b c d e f; do st link-report hold work=$w stage=build reason="r $w" >/dev/null & done; wait
+check "two writers at once: both moves applied, valid JSON, both events [status-state#R2.S4]" 'jsonok "$SF" && [ $(grep -c "\"hold\.[a-f]\": \"build r [a-f]\"" "$SF") -eq 6 ] && [ $(grep -c "\"type\":\"stage.held\"" "$W/events.jsonl") -eq 6 ] && grep -q "\"seq\": \"7\"" "$SF"'
+rm -rf "$tmp"
+sw; mkdir -p "$W/state/.lock-link-report"; touch -t 202001010000 "$W/state/.lock-link-report"; out=$(st link-report write); code=$?
+check "a lock older than 30 s is taken over" '[ $code -eq 0 ] && grep -q "\"spec\": \"writing\"" "$SF" && [ ! -d "$W/state/.lock-link-report" ]'
+rm -rf "$tmp"
+check "state.sh stays under 300 lines" '[ $(wc -l < "$ST") -lt 300 ]'
+
 echo "# releases"
 VB="$PWD/tests/version-bump.sh"
 tmp=$(mktemp -d); r="$tmp/r"; mkdir -p "$r/$P/.claude-plugin" "$r/.factree" "$r/tests"

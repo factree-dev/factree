@@ -15,6 +15,8 @@ type="$1"; subject="$2"; data="${3:-}"
 if [ -z "$type" ] || [ -z "$subject" ]; then
   echo "usage: event.sh <type> <subject-id> ['<json object>']" >&2; exit 2
 fi
+# Moves only state.sh logs (status-state R2): it sets FACTREE_STATE_WRITER=1.
+[ "${FACTREE_STATE_WRITER:-}" = 1 ] && types="$types spec.edited review.merged review.closed"
 case " $types " in
   *" $type "*) ;;
   *) echo "unknown event type '$type' (expected one of: $types)" >&2; exit 2 ;;
