@@ -421,7 +421,33 @@ function waitingDecisions(specs, summaries, plans, events, sessions) {
 	return cards.sort((a, b) => a.since.localeCompare(b.since));
 }
 var here$1 = dirname(fileURLToPath(import.meta.url));
-var EVENT_SH = [join(here$1, "..", "scripts", "event.sh"), join(here$1, "..", "..", "..", "plugins", "factree", "scripts", "event.sh")].find((p) => existsSync(p)) ?? "";
+var script = (name) => [join(here$1, "..", "scripts", name), join(here$1, "..", "..", "..", "plugins", "factree", "scripts", name)].find((p) => existsSync(p)) ?? "";
+var EVENT_SH = script("event.sh");
+var STATE_SH = script("state.sh");
+/** Make a move through state.sh, the one writer of status (status-state R7): refused is 409, a held lock 503. */
+function stateMove(root, spec, move, fields = []) {
+	const env = {
+		...process.env,
+		FACTREE_HOME: root
+	};
+	delete env.CLAUDE_CODE_SESSION_ID;
+	try {
+		execFileSync("bash", [
+			STATE_SH,
+			spec,
+			move,
+			...fields
+		], {
+			env,
+			cwd: dirname(root),
+			stdio: "pipe"
+		});
+	} catch (e) {
+		const err = e;
+		const msg = (String(err.stderr ?? "").trim() || String(err.stdout ?? "").trim() || `${move} failed`).split("\n")[0];
+		throw new DecisionError(err.status === 4 ? 503 : err.status === 3 ? 409 : 500, msg);
+	}
+}
 /** Log through event.sh, so there's one event format, as the companion rather than any Claude session. */
 function logEvent(root, type, subject, data) {
 	const env = {
@@ -505,12 +531,11 @@ function applyDecision(root, user, body, cards, today = (/* @__PURE__ */ new Dat
 			const card = cards.find((c) => c.kind === "spec" && c.spec === spec);
 			if (!card) throw new DecisionError(409, `${spec} isn't waiting for approval`);
 			if (!card.approvable) throw new DecisionError(409, card.blockedReason ?? "Not approvable here");
+			stateMove(root, spec, "approve", [`by=${by}`, "via=companion"]);
 			setFrontMatter(join(root, "specs", `${spec}.md`), {
-				status: "approved",
 				approved_by: `${by} (via companion)`,
 				approved_at: today
 			});
-			logEvent(root, "spec.approved", spec, via);
 			return;
 		}
 		case "approve-plan": {
@@ -521,25 +546,26 @@ function applyDecision(root, user, body, cards, today = (/* @__PURE__ */ new Dat
 			const dir = join(root, "work", work);
 			if (!existsSync(join(dir, "plan.md"))) throw new DecisionError(409, "Only plans split by vertical can be approved here");
 			const name = `${by} (via companion)`;
+			const tasks = Number(card.why.match(/^(\d+) tasks/)?.[1] ?? 0);
+			stateMove(root, card.spec, "plan-approve", [
+				`work=${work}`,
+				`by=${by}`,
+				"via=companion",
+				`tasks=${tasks}`
+			]);
 			for (const v of readdirSync(dir)) {
 				const d = join(dir, v, "design.md");
 				if (existsSync(d)) writeFileSync(d, readFileSync(d, "utf8").replace(/Approved: <pending>/g, `Approved: ${name}, ${today}`));
 			}
 			setFrontMatter(join(dir, "plan.md"), {
-				status: "approved",
 				design_approved_by: name,
 				design_approved_at: today,
 				approved_by: name,
 				approved_at: today
 			});
-			const tasks = Number(card.why.match(/^(\d+) tasks/)?.[1] ?? 0);
 			logEvent(root, "plan.design_approved", work, {
 				...via,
 				new_patterns: (card.newPatterns ?? []).map((p) => p.id)
-			});
-			logEvent(root, "plan.approved", work, {
-				...via,
-				tasks
 			});
 			return;
 		}
@@ -547,6 +573,8 @@ function applyDecision(root, user, body, cards, today = (/* @__PURE__ */ new Dat
 			const spec = slug("spec"), note = str("note", 300);
 			const work = b.work === void 0 ? void 0 : slug("work");
 			if (!cards.some((c) => c.spec === spec && (work === void 0 || c.work === work))) throw new DecisionError(409, "Nothing on that is waiting");
+			const sf = join(root, "specs", `${spec}.md`);
+			if (work === void 0 && existsSync(sf) && /^status:\s*approved\b/m.test(readFileSync(sf, "utf8").split(/\n---\n/)[0])) stateMove(root, spec, "edit");
 			logEvent(root, "decision.feedback", spec, {
 				note,
 				...work ? { work } : {},
