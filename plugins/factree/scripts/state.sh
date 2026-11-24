@@ -135,7 +135,7 @@ case "$type" in
   *) subject="$work"; data="$data,\"spec\":\"$spec\"" ;;
 esac
 [ -n "$task" ] && data="$data,\"task\":\"$task\""
-case "$pr" in "") ;; *[!0-9]*) data="$data,\"pr\":\"$pr\"" ;; *) data="$data,\"pr\":$pr" ;; esac
+[ -n "$pr" ] && data="$data,\"pr\":\"$pr\""
 [ -n "$stage" ] && data="$data,\"stage\":\"$stage\""
 [ -n "$reason" ] && data="$data,\"reason\":\"$reason\""
 [ "$move" = implemented ] && data="$data,\"tasks\":$total"

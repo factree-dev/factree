@@ -840,6 +840,11 @@ check "hold then release per work [status-state#R3.S3]" 'echo "$held" | grep -q 
 before=$(snap); out=$(st link-report hold stage=review 'reason=a"b'); code=$?
 check "a value with \" is refused, naming the field" '[ $code -eq 3 ] && echo "$out" | grep -q "reason" && [ "$before" = "$(snap)" ]'
 rm -rf "$tmp"
+sw; st link-report write >/dev/null; st link-report approve >/dev/null; st link-report plan work=002-link-report >/dev/null; st link-report plan-approve work=002-link-report >/dev/null
+for t in T1 T2 T3 T4 T5; do st link-report task-done work=002-link-report task=$t >/dev/null; done; st link-report implemented work=002-link-report >/dev/null
+st link-report review-open work=002-link-report pr=0123 >/dev/null; code=$?
+check "review-open pr=0123 logs pr as a string and every event line is valid JSON [status-state#R3.S4]" '[ $code -eq 0 ] && grep -q "\"type\":\"review.opened\".*\"pr\":\"0123\"" "$W/events.jsonl" && ! grep -vq "^{.*\"data\":{.*}}$" "$W/events.jsonl" && ! grep -Eq "\"(pr|commit)\":[0-9]*0[0-9]*[,}]" "$W/events.jsonl" && grep -q "\"prs.002-link-report\": \"0123\"" "$SF"'
+rm -rf "$tmp"
 sw; st link-report write >/dev/null; for w in a b c d e f; do st link-report hold work=$w stage=build reason="r $w" >/dev/null & done; wait
 check "two writers at once: both moves applied, valid JSON, both events [status-state#R2.S4]" 'jsonok "$SF" && [ $(grep -c "\"hold\.[a-f]\": \"build r [a-f]\"" "$SF") -eq 6 ] && [ $(grep -c "\"type\":\"stage.held\"" "$W/events.jsonl") -eq 6 ] && grep -q "\"seq\": \"7\"" "$SF"'
 rm -rf "$tmp"
