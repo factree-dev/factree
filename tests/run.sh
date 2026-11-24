@@ -186,11 +186,17 @@ check "unsafe session ids are ignored" '[ $(ls "$tmp/ws/.factree/sessions" | wc 
 (cd "$tmp/ws/repo" && bash $EVENT question.asked demo '{"n":1,"text":"Hidden or disabled?"}')
 check "event.sh accepts question.asked and records cwd" 'grep -q "\"type\":\"question.asked\".*\"cwd\":\"$tmp/ws/repo\"" "$tmp/ws/.factree/events.jsonl"'
 check "event.sh rejects unknown types" '! bash $EVENT spec.bogus demo 2>/dev/null'
-(cd "$tmp/ws/repo" && CLAUDE_CODE_SESSION_ID=611a0794-d356-4c30-a967-cc8cb6f9f85a bash $EVENT spec.approved demo '{"by":"A"}')
+for t in spec.created spec.approved spec.edited plan.created plan.approved task.started task.done plan.implemented review.opened review.merged review.closed stage.held stage.released; do
+  msg=$(cd "$tmp/ws/repo" && env -u FACTREE_STATE_WRITER bash $EVENT $t demo '{"by":"A"}' 2>&1); echo "$t $? $msg"
+done > "$tmp/moves.out"
+check "event.sh refuses every move type without the writer, exit 3 [status-state#R7.S1]" '[ $(grep -c "^[a-z.]* 3 [a-z.]* is a status move: use state.sh$" "$tmp/moves.out") -eq 13 ] && ! grep -q "\"type\":\"spec.created\"" "$tmp/ws/.factree/events.jsonl"'
+check "event.sh spec.approved without the writer is refused, exit 3 [status-state#R7.S1]" '(cd "$tmp/ws/repo" && env -u FACTREE_STATE_WRITER bash $EVENT spec.approved demo "{}" >/dev/null 2>&1; [ $? -eq 3 ])'
+check "event.sh accepts a non-move type without the writer [status-state#R7.S1]" '(cd "$tmp/ws/repo" && env -u FACTREE_STATE_WRITER bash $EVENT spec.step demo "{}" 2>/dev/null) && tail -n1 "$tmp/ws/.factree/events.jsonl" | grep -q "\"type\":\"spec.step\""'
+(cd "$tmp/ws/repo" && CLAUDE_CODE_SESSION_ID=611a0794-d356-4c30-a967-cc8cb6f9f85a FACTREE_STATE_WRITER=1 bash $EVENT spec.approved demo '{"by":"A"}')
 check "event.sh records the session [spec-sessions#R1.S1]" 'tail -n1 "$tmp/ws/.factree/events.jsonl" | grep -q "\"session\":\"611a0794-d356-4c30-a967-cc8cb6f9f85a\""'
-(cd "$tmp/ws/repo" && env -u CLAUDE_CODE_SESSION_ID bash $EVENT spec.approved demo '{"by":"A"}')
+(cd "$tmp/ws/repo" && env -u CLAUDE_CODE_SESSION_ID FACTREE_STATE_WRITER=1 bash $EVENT spec.approved demo '{"by":"A"}')
 check "no session outside Claude Code [spec-sessions#R1.S2]" '! tail -n1 "$tmp/ws/.factree/events.jsonl" | grep -q "\"session\""'
-(cd "$tmp/ws/repo" && CLAUDE_CODE_SESSION_ID='a"b' bash $EVENT spec.approved demo '{"by":"A"}')
+(cd "$tmp/ws/repo" && CLAUDE_CODE_SESSION_ID='a"b' FACTREE_STATE_WRITER=1 bash $EVENT spec.approved demo '{"by":"A"}')
 check "unsafe session ids are left out [spec-sessions#R1.S3]" 'tail -n1 "$tmp/ws/.factree/events.jsonl" | grep -v -q "\"session\"" && tail -n1 "$tmp/ws/.factree/events.jsonl" | grep -q "\"data\":{\"by\":\"A\"}}$"'
 rm -rf "$tmp"
 
@@ -198,7 +204,7 @@ echo "# companion decisions reach Claude"
 WAIT="$(pwd)/$P/scripts/wait-decision.sh"
 SINCE="$(pwd)/$P/scripts/decisions-since.sh"
 tmp=$(mktemp -d); mkdir -p "$tmp/ws/.factree" "$tmp/ws/repo"; touch "$tmp/ws/.factree/events.jsonl"
-decided() { (cd "$tmp/ws/repo" && env -u CLAUDE_CODE_SESSION_ID bash $EVENT "$@"); }
+decided() { (cd "$tmp/ws/repo" && env -u CLAUDE_CODE_SESSION_ID FACTREE_STATE_WRITER=1 bash $EVENT "$@"); }   # fabricates companion history on purpose, so it holds the writer env
 waiting() { (cd "$tmp/ws/repo" && FACTREE_WAIT_EVERY=0.2 FACTREE_WAIT_FOR=${2:-20} bash "$WAIT" $1 > "$tmp/out" 2>&1) & wpid=$!; sleep 0.5; }
 decided question.asked demo '{"n":3,"text":"Where?"}'
 waiting demo
@@ -236,7 +242,7 @@ rm -rf "$tmp"
 
 echo "# each decision reaches Claude once"
 tmp=$(mktemp -d); mkdir -p "$tmp/ws/.factree" "$tmp/ws/repo"; touch "$tmp/ws/.factree/events.jsonl"
-decided() { (cd "$tmp/ws/repo" && env -u CLAUDE_CODE_SESSION_ID bash $EVENT "$@"); }
+decided() { (cd "$tmp/ws/repo" && env -u CLAUDE_CODE_SESSION_ID FACTREE_STATE_WRITER=1 bash $EVENT "$@"); }   # fabricates companion history on purpose, so it holds the writer env
 answer() { decided question.answered demo "{\"n\":$1,\"answer\":\"A$1\",\"by\":\"John Doe\",\"via\":\"companion\"}"; }
 wait_in() { (cd "$tmp/ws/repo" && CLAUDE_CODE_SESSION_ID=$1 FACTREE_WAIT_EVERY=0.2 FACTREE_WAIT_FOR=${2:-4} bash "$WAIT" demo > "$tmp/out" 2>&1) & wpid=$!; }
 done_in() { for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25; do kill -0 $wpid 2>/dev/null || return 0; sleep 0.2; done; return 1; }
@@ -258,8 +264,8 @@ for t in task.reviewed bug.escaped lesson.proposed lesson.approved lesson.reject
 check "event.sh accepts the learning events [self-improving#R2.S1]" '[ $(grep -c "\"type\":\"\(task.reviewed\|bug.escaped\|lesson.proposed\|lesson.approved\|lesson.rejected\)\"" "$tmp/.factree/events.jsonl" 2>/dev/null) -eq 5 ]'
 rm -rf "$tmp"
 tmp=$(mktemp -d); mkdir -p "$tmp/.factree"
-FACTREE_HOME="$tmp/.factree" bash $EVENT stage.held 063-x '{"stage":"review","reason":"acceptance run"}' 2>/dev/null
-FACTREE_HOME="$tmp/.factree" bash $EVENT stage.released 063-x '{"stage":"review"}' 2>/dev/null
+FACTREE_HOME="$tmp/.factree" FACTREE_STATE_WRITER=1 bash $EVENT stage.held 063-x '{"stage":"review","reason":"acceptance run"}' 2>/dev/null
+FACTREE_HOME="$tmp/.factree" FACTREE_STATE_WRITER=1 bash $EVENT stage.released 063-x '{"stage":"review"}' 2>/dev/null
 check "event.sh accepts stage.held and stage.released on the work [build-status#R4.S3]" 'grep -q "\"type\":\"stage.held\",\"work\":\"063-x\"" "$tmp/.factree/events.jsonl" && grep -q "\"type\":\"stage.released\",\"work\":\"063-x\"" "$tmp/.factree/events.jsonl"'
 rm -rf "$tmp"
 
@@ -312,7 +318,7 @@ GH
 chmod +x "$tmp/bin/gh"
 # gh answers "<state> <mergeable> <reviewDecision>", as wait-review.sh asks it to.
 printf 'OPEN MERGEABLE REVIEW_REQUIRED\n' > "$tmp/bin/state"; : > "$tmp/bin/comments"
-(cd "$tmp/ws/repo" && bash $EVENT review.opened 012-review '{"pr":"7","url":"https://github.com/o/r/pull/7","base":"main"}')
+(cd "$tmp/ws/repo" && FACTREE_STATE_WRITER=1 bash $EVENT review.opened 012-review '{"pr":"7","url":"https://github.com/o/r/pull/7","base":"main"}')
 wr() { (cd "$tmp/ws/repo" && PATH="$tmp/bin:$PATH" FACTREE_WAIT_EVERY=0.2 FACTREE_WAIT_FOR=${1:-3} bash "$WR" 012-review > "$tmp/out" 2>&1) ; }
 # gh answers one comment per line, fields joined by the unit separator (\037), as wait-review.sh asks it to.
 printf '101\037priya\037src/App.tsx\03742\037this loop is off by one\n' > "$tmp/bin/comments"; wr
@@ -350,7 +356,7 @@ else r=${2#repos/acme/}; r=${r%%/*}; case "$2" in */pulls/*) cat "$d/comments-$r
 GH
 chmod +x "$tmp/bin/gh"
 for r in backend frontend; do printf 'OPEN MERGEABLE REVIEW_REQUIRED\n' > "$tmp/bin/state-$r"; : > "$tmp/bin/comments-$r"
-  (cd "$tmp/ws/$r" && bash $EVENT review.opened 062-x "{\"pr\":\"7\",\"url\":\"u\",\"repo\":\"$r\",\"tasks\":\"T1\",\"base\":\"main\"}"); done
+  (cd "$tmp/ws/$r" && FACTREE_STATE_WRITER=1 bash $EVENT review.opened 062-x "{\"pr\":\"7\",\"url\":\"u\",\"repo\":\"$r\",\"tasks\":\"T1\",\"base\":\"main\"}"); done
 wm() { (cd "$tmp/ws/frontend" && PATH="$tmp/bin:$PATH" FACTREE_WAIT_EVERY=0.2 FACTREE_WAIT_FOR=1 bash "$WR" 062-x "$@" > "$tmp/out" 2>&1); }
 printf '201\037priya\037a.ts\0373\037fix this\n' > "$tmp/bin/comments-frontend"; wm frontend
 check "a comment on frontend #7 is logged for frontend, not backend #7 [multi-repo#R8.S3]" 'grep -q "\"type\":\"review.comment\".*\"id\":\"201\".*\"repo\":\"frontend\"" "$tmp/ws/.factree/events.jsonl" && ! grep "review.comment" "$tmp/ws/.factree/events.jsonl" | grep -q "\"repo\":\"backend\"" && grep -q "^review: comment by priya" "$tmp/out"'
@@ -358,7 +364,7 @@ printf 'MERGED UNKNOWN \n' > "$tmp/bin/state-backend"; wm backend 7
 check "each repo's state is its own, logged with its repo" 'grep -q "\"type\":\"review.state\".*\"pr\":\"7\",\"state\":\"MERGED\",\"repo\":\"backend\"" "$tmp/ws/.factree/events.jsonl" && ! grep "review.state" "$tmp/ws/.factree/events.jsonl" | grep -q "\"repo\":\"frontend\""'
 wm
 check "two repos and no repo named: it says which to name" 'grep -q "^review: 062-x has pull requests in several repos (backend,frontend): name one" "$tmp/out" && [ $(wc -l < "$tmp/out") -eq 1 ]'
-for p in 12 13; do (cd "$tmp/ws/backend" && bash $EVENT review.opened 062-x "{\"pr\":\"$p\",\"url\":\"u\",\"repo\":\"backend\",\"tasks\":\"T$p\",\"base\":\"main\"}"); done
+for p in 12 13; do (cd "$tmp/ws/backend" && FACTREE_STATE_WRITER=1 bash $EVENT review.opened 062-x "{\"pr\":\"$p\",\"url\":\"u\",\"repo\":\"backend\",\"tasks\":\"T$p\",\"base\":\"main\"}"); done
 printf 'OPEN MERGEABLE APPROVED\n' > "$tmp/bin/state-backend"; wm backend 12; wm backend 13
 check "two PRs in one repo reaching the same state are each logged [multi-repo#R8]" 'grep -q "\"type\":\"review.state\".*\"pr\":\"12\",\"state\":\"APPROVED\",\"repo\":\"backend\"" "$tmp/ws/.factree/events.jsonl" && grep -q "\"type\":\"review.state\".*\"pr\":\"13\",\"state\":\"APPROVED\",\"repo\":\"backend\"" "$tmp/ws/.factree/events.jsonl" && grep -q "^review: APPROVED$" "$tmp/out"'
 git -C "$tmp/ws/frontend" remote set-url origin https://gitlab.com/acme/frontend.git; wm frontend
@@ -371,7 +377,7 @@ git -C "$tmp/r" remote add origin https://github.com/acme/r.git
 printf '#!/usr/bin/env bash\n[ "$1" = pr ] && cat "$(dirname "$0")/state"; exit 0\n' > "$tmp/bin/gh"; chmod +x "$tmp/bin/gh"
 printf 'OPEN MERGEABLE APPROVED\n' > "$tmp/bin/state"
 (cd "$tmp/r" && bash $EVENT review.state 062-s '{"pr":"9","state":"APPROVED","repo":"x"}')
-for p in 12 13; do (cd "$tmp/r" && bash $EVENT review.opened 062-s "{\"pr\":\"$p\",\"url\":\"u\",\"repo\":\".\",\"base\":\"main\"}"); done
+for p in 12 13; do (cd "$tmp/r" && FACTREE_STATE_WRITER=1 bash $EVENT review.opened 062-s "{\"pr\":\"$p\",\"url\":\"u\",\"repo\":\".\",\"base\":\"main\"}"); done
 for p in 12 13; do (cd "$tmp/r" && PATH="$tmp/bin:$PATH" bash "$WR" 062-s . "$p" --once >/dev/null 2>&1); done
 check "repo . : each PR's state is logged, and . is not a wildcard [multi-repo#R8]" '[ $(grep -c "\"type\":\"review.state\".*\"state\":\"APPROVED\",\"repo\":\"\.\"" "$tmp/r/.factree/events.jsonl") -eq 2 ]'
 rm -rf "$tmp"
@@ -388,11 +394,11 @@ cat > "$tmp/bin/gh" <<'GH'
 echo "$*" >> "$(dirname "$0")/calls"; [ "$1" = pr ] && echo "OPEN MERGEABLE REVIEW_REQUIRED"; exit 0
 GH
 chmod +x "$tmp/bin/gh"
-for r in backend frontend; do (cd "$tmp/ws/$r" && bash $EVENT review.opened 062-x "{\"pr\":\"7\",\"url\":\"u\",\"repo\":\"$r\",\"base\":\"main\"}"); done
+for r in backend frontend; do (cd "$tmp/ws/$r" && FACTREE_STATE_WRITER=1 bash $EVENT review.opened 062-x "{\"pr\":\"7\",\"url\":\"u\",\"repo\":\"$r\",\"base\":\"main\"}"); done
 (cd "$tmp/ws/backend" && bash $EVENT review.state 062-x '{"pr":"7","state":"MERGED","repo":"backend"}')
 (cd "$tmp/ws/frontend" && PATH="$tmp/bin:/usr/bin:/bin" bash "$CU" >/dev/null 2>&1)
 check "catch-up skips the merged #7 in backend and still checks frontend's #7 [multi-repo#R8.S3]" '! grep -q "acme/backend" "$tmp/bin/calls" && grep -q "^pr view 7 -R acme/frontend" "$tmp/bin/calls"'
-(cd "$tmp/ws/infra" && bash $EVENT review.opened 062-y '{"pr":"3","url":"u","repo":"infra","base":"main"}')
+(cd "$tmp/ws/infra" && FACTREE_STATE_WRITER=1 bash $EVENT review.opened 062-y '{"pr":"3","url":"u","repo":"infra","base":"main"}')
 : > "$tmp/bin/calls"; (cd "$tmp/ws/infra" && PATH="$tmp/bin:/usr/bin:/bin" bash "$WR" 062-y infra --once >/dev/null 2>&1)
 check "an ssh:// origin parses to acme/infra" 'grep -q "^pr view 3 -R acme/infra" "$tmp/bin/calls"'
 rm -rf "$tmp"
@@ -407,7 +413,7 @@ case "$1 $2" in "pr view") cat "$d/state" ;; "api "*) : ;; esac
 GH
 chmod +x "$tmp/bin/gh"
 printf 'MERGED UNKNOWN \n' > "$tmp/bin/state"
-(cd "$tmp/ws/repo" && bash $EVENT review.opened 040-export '{"pr":"12","url":"u","base":"main"}')
+(cd "$tmp/ws/repo" && FACTREE_STATE_WRITER=1 bash $EVENT review.opened 040-export '{"pr":"12","url":"u","base":"main"}')
 cu() { (cd "$tmp/ws/repo" && PATH="$1:/usr/bin:/bin" bash "$CU" > "$tmp/out" 2>&1); }
 cu "$tmp/bin"
 check "merged with no wait [review#R11.S1]" 'grep -q "\"type\":\"review.state\",\"work\":\"040-export\".*\"state\":\"MERGED\"" "$tmp/ws/.factree/events.jsonl" && [ ! -s "$tmp/out" ]'
@@ -415,10 +421,10 @@ check "merged with no wait [review#R11.S1]" 'grep -q "\"type\":\"review.state\",
 check "not too often [review#R11.S2]" '[ ! -s "$tmp/bin/calls" ]'
 rm -f "$tmp/ws/.factree/review-catchup.at"; : > "$tmp/bin/calls"; cu "$tmp/bin"
 check "finished ones skipped [review#R11.S3]" '! grep -q "pr view 12" "$tmp/bin/calls"'
-rm -f "$tmp/ws/.factree/review-catchup.at"; (cd "$tmp/ws/repo" && bash $EVENT review.opened 041-other '{"pr":"13","url":"u","base":"main"}')
+rm -f "$tmp/ws/.factree/review-catchup.at"; (cd "$tmp/ws/repo" && FACTREE_STATE_WRITER=1 bash $EVENT review.opened 041-other '{"pr":"13","url":"u","base":"main"}')
 before=$(wc -l < "$tmp/ws/.factree/events.jsonl"); cu "$tmp/nogh"
 check "no GitHub CLI [review#R11.S4]" '[ ! -s "$tmp/out" ] && [ "$(wc -l < "$tmp/ws/.factree/events.jsonl")" = "$before" ]'
-rm -f "$tmp/ws/.factree/review-catchup.at"; (cd "$tmp/ws/repo" && bash $EVENT review.opened 042-hook '{"pr":"14","url":"u","base":"main"}')
+rm -f "$tmp/ws/.factree/review-catchup.at"; (cd "$tmp/ws/repo" && FACTREE_STATE_WRITER=1 bash $EVENT review.opened 042-hook '{"pr":"14","url":"u","base":"main"}')
 out=$(printf '{"session_id":"hook1","hook_event_name":"SessionStart","cwd":"%s"}' "$tmp/ws/repo" | PATH="$tmp/bin:/usr/bin:/bin" bash $P/scripts/session-hook.sh)
 for n in 1 2 3 4 5 6 7 8 9 10; do grep -q "\"work\":\"042-hook\".*\"state\":\"MERGED\"" "$tmp/ws/.factree/events.jsonl" && break; sleep 0.3; done
 check "the hook starts the catch-up [review#R11.S1]" 'grep -q "\"work\":\"042-hook\".*\"state\":\"MERGED\"" "$tmp/ws/.factree/events.jsonl" && [ -z "$out" ]'
@@ -472,10 +478,10 @@ rm -rf "$tmp"
 echo "# version check"
 V=$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' $P/.claude-plugin/plugin.json | head -n1)
 tmp=$(mktemp -d); mkdir -p "$tmp/ws/.factree" "$tmp/ws/repo"
-(cd "$tmp/ws/repo" && bash $EVENT spec.approved demo '{"by":"A"}')
+(cd "$tmp/ws/repo" && FACTREE_STATE_WRITER=1 bash $EVENT spec.approved demo '{"by":"A"}')
 check "events record the version [version-check#R1.S1]" 'tail -n1 "$tmp/ws/.factree/events.jsonl" | grep -q "\"v\":\"$V\""'
 mkdir -p "$tmp/bare/scripts"; cp $P/scripts/*.sh "$tmp/bare/scripts/"
-(cd "$tmp/ws/repo" && bash "$tmp/bare/scripts/event.sh" spec.approved demo '{"by":"A"}')
+(cd "$tmp/ws/repo" && FACTREE_STATE_WRITER=1 bash "$tmp/bare/scripts/event.sh" spec.approved demo '{"by":"A"}')
 check "no manifest, no version [version-check#R1.S2]" '! tail -n1 "$tmp/ws/.factree/events.jsonl" | grep -q "\"v\":"'
 start() { echo "{\"session_id\":\"s9\",\"hook_event_name\":\"$2\",\"cwd\":\"$tmp/ws/repo\"}" | bash "$1"; }
 echo '{"ts":"2026-11-17T10:00:00Z","type":"spec.step","spec":"demo","v":"9.9.0","data":{}}' >> "$tmp/ws/.factree/events.jsonl"
@@ -494,7 +500,11 @@ rm -rf "$tmp"
 
 echo "# build progress"
 TD="$(pwd)/$P/scripts/task-done.sh"
-tmp=$(mktemp -d); mkdir -p "$tmp/.factree/work"; cp -R tests/validate-plan/verticals/plan "$tmp/.factree/work/007-widget-export"
+ST="$(pwd)/$P/scripts/state.sh"
+# The plan's spec, with its state approved and planned, as the flow leaves it before a build [status-state#R7].
+wstate() { mkdir -p "$1/specs"; printf -- '---\nstatus: approved\n---\n# widget-export\n' > "$1/specs/widget-export.md"
+  FACTREE_HOME="$1" bash "$ST" widget-export plan work=007-widget-export >/dev/null && FACTREE_HOME="$1" bash "$ST" widget-export plan-approve work=007-widget-export >/dev/null; }
+tmp=$(mktemp -d); mkdir -p "$tmp/.factree/work"; cp -R tests/validate-plan/verticals/plan "$tmp/.factree/work/007-widget-export"; wstate "$tmp/.factree"
 rv() { FACTREE_HOME="$1/.factree" bash $EVENT task.reviewed 007-widget-export "{\"task\":\"$2\",\"spec\":\"$3\",\"quality\":\"${4:-pass}\"}"; }
 rvs() { FACTREE_HOME="$1/.factree" bash $EVENT agent.started 007-widget-export "{\"role\":\"review\",\"task\":\"$2\",\"model\":\"sonnet\"}"; }   # the reviewer the hook would have logged
 for t in T1 T2 T3; do rvs "$tmp" $t; rv "$tmp" $t pass; done
@@ -507,10 +517,11 @@ out=$(FACTREE_HOME="$tmp/.factree" bash "$TD" 007-widget-export T2 0a0b0c0 60 "n
 check "the last task marks the plan implemented [build#R6.S1]" 'grep -q "^implemented_at: 20" "$tmp/.factree/work/007-widget-export/plan.md" && grep -q "\"type\":\"plan.implemented\",\"work\":\"007-widget-export\"" "$tmp/.factree/events.jsonl" && echo "$out" | grep -q "007-widget-export implemented"'
 check "unknown task is refused" '! FACTREE_HOME="$tmp/.factree" bash "$TD" 007-widget-export T9 x 1 y 2>/dev/null'
 rm -rf "$tmp"
-rtmp() { tmp=$(mktemp -d); mkdir -p "$tmp/.factree/work"; cp -R tests/validate-plan/verticals/plan "$tmp/.factree/work/007-widget-export"; }
+rtmp() { tmp=$(mktemp -d); mkdir -p "$tmp/.factree/work"; cp -R tests/validate-plan/verticals/plan "$tmp/.factree/work/007-widget-export"; wstate "$tmp/.factree"; }
 tdr() { FACTREE_HOME="$tmp/.factree" bash "$TD" 007-widget-export T2 abc1234 60 "npm test" 2>&1; echo "rc=$?"; }
 t2open() { awk "/^### T2:/{f=1;next} /^### /{f=0} f" "$tmp/.factree/work/007-widget-export/"*/tasks.md | grep -q "^- \[ \]"; }
 rtmp; rvs "$tmp" T2; rv "$tmp" T2 pass; out=$(tdr)
+check "task-done.sh moves the state's count by one [status-state#R7.S2]" 'grep -q "\"tasks.007-widget-export\": \"T2\"" "$tmp/.factree/state/widget-export.json" && grep -q "\"plan.007-widget-export\": \"building\"" "$tmp/.factree/state/widget-export.json" && grep -q "\"type\":\"task.done\".*\"move\":\"task-done\"" "$tmp/.factree/events.jsonl"'
 check "reviewed and passing is marked [parallel-build#R5.S1]" 'echo "$out" | grep -q "^T2 done$" && echo "$out" | grep -q "rc=0" && ! t2open'
 rtmp; out=$(tdr)
 check "never reviewed exits 3, ticks and logs nothing [parallel-build#R5.S2]" 'echo "$out" | grep -q "^T2 has no passing review$" && echo "$out" | grep -q "rc=3" && t2open && ! grep -q task.done "$tmp/.factree/events.jsonl" 2>/dev/null'
@@ -527,7 +538,7 @@ check "a review event without a reviewer subagent exits 3 [parallel-build#R5.S6]
 rm -rf "$tmp"
 # task.done records the task's repo [multi-repo#R3.S4]
 tmp=$(mktemp -d); tmp=$(cd "$tmp" && pwd -P); bash tests/fixtures/multi/make.sh "$tmp/ws"; mkdir -p "$tmp/ws/.factree/work"
-cp -R tests/validate-plan/verticals/plan "$tmp/ws/.factree/work/007-widget-export"; printf 'frontend\nbackend\ninfra\n' > "$tmp/ws/.factree/repos.md"
+cp -R tests/validate-plan/verticals/plan "$tmp/ws/.factree/work/007-widget-export"; printf 'frontend\nbackend\ninfra\n' > "$tmp/ws/.factree/repos.md"; wstate "$tmp/ws/.factree"
 M="$tmp/ws/.factree/work/007-widget-export"
 sed -i.bak 's#`src/x.ts`#`backend/src/x.ts`#' "$M/backend/tasks.md"; sed -i.bak 's#`src/x.ts`#`frontend/src/x.ts`#' "$M/frontend/tasks.md"; rm -f "$M"/*/*.bak
 FACTREE_HOME="$tmp/ws/.factree" bash $EVENT agent.started 007-widget-export '{"role":"review","task":"T2","model":"sonnet"}'
@@ -656,7 +667,7 @@ I="$tmp/plugin"
 init_out=$(cd "$tmp/repo" && env -u FACTREE_HOME bash "$I/scripts/init.sh" 2>&1); init_code=$?
 mkdir -p "$tmp/repo/.factree/specs" && cp tests/fixtures/workspace/specs/link-report.md "$tmp/repo/.factree/specs/"   # as the spec skill does (its step 2)
 val_out=$(bash "$I/skills/spec/scripts/validate.sh" "$tmp/repo/.factree/specs/link-report.md" 2>&1); val_code=$?
-(cd "$tmp/repo" && env -u FACTREE_HOME bash "$I/scripts/event.sh" spec.approved link-report '{"by":"John Doe"}' >/dev/null 2>&1); ev_code=$?
+(cd "$tmp/repo" && env -u FACTREE_HOME bash "$I/scripts/state.sh" link-report write >/dev/null 2>&1 && env -u FACTREE_HOME bash "$I/scripts/state.sh" link-report approve by="John Doe" >/dev/null 2>&1); ev_code=$?
 hook_out=$(printf '{"session_id":"fresh1","hook_event_name":"SessionStart","cwd":"%s"}' "$tmp/repo" | env -u FACTREE_HOME bash "$I/scripts/session-hook.sh" 2>&1); hook_code=$?
 check "skills' scripts work in a new repo [clean-install#R2.S1]" '[ $init_code -eq 0 ] && [ -d "$tmp/repo/.factree" ] && grep -qx ".factree/" "$tmp/repo/.git/info/exclude" && [ $val_code -eq 0 ] && [ $ev_code -eq 0 ] && grep -q "\"type\":\"spec.approved\"" "$tmp/repo/.factree/events.jsonl" && [ $hook_code -eq 0 ] && [ -f "$tmp/repo/.factree/sessions/fresh1.json" ]'
 port=$((4800 + RANDOM % 150))

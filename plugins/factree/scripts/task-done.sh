@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Mark a built task done: tick its steps, log task.done, and mark the plan implemented when it was the last.
+# Mark a built task done: tick its steps, record task.done through state.sh, and mark the plan implemented when it was the last.
 # Usage: task-done.sh <work> <task> <commit> <changed-lines> <tests-run>
 #   e.g. task-done.sh 015-build T1 3f2a9c1 142 "npm test"
 # Prints "<task> done", then "<work> implemented" if every task in the plan is now done.
@@ -36,10 +36,15 @@ awk -v T="### $task:" '
   inside && /^- \[ \] / { sub(/^- \[ \] /, "- [x] ") }
   { print }' "$file" > "$tmp" && mv "$tmp" "$file"
 
-. "$(cd "$(dirname "$0")" && pwd)/lib.sh"
+. "$here/lib.sh"
 # The repo the task works in (plan-repos.sh: "." for a single-repo workspace) [multi-repo#R3.S4].
 repo=$(bash "$here/plan-repos.sh" "$dir" 2>/dev/null | awk -F'\t' -v t="$task" '$1 == t { print $2 }')
-bash "$here/event.sh" task.done "$work" "{\"task\":\"$task\",\"commit\":\"$(json_escape "$commit")\",\"lines\":$lines,\"tests\":\"$(json_escape "$tests")\",\"repo\":\"$(json_escape "${repo:-.}")\"}" || exit 1
+# The move goes through state.sh, the one writer (status-state R7); it logs task.done. Its values can't hold " or \.
+head="$dir/plan.md"; [ -f "$head" ] || head="$dir/tasks.md"
+spec=$(awk 'NR == 1 && $0 == "---" { fm = 1; next } fm && $0 == "---" { exit } fm && /^spec:/ { sub(/^spec:[ ]*/, ""); sub(/[ #].*/, ""); print; exit }' "$head" 2>/dev/null)
+[ -n "$spec" ] || { echo "no spec: in the front matter of $head" >&2; exit 1; }
+clean() { printf '%s' "$1" | tr -d '"\\' | tr '\n' ' '; }
+bash "$here/state.sh" "$spec" task-done work="$work" task="$task" commit="$(clean "$commit")" lines="$lines" tests="$(clean "$tests")" repo="$(clean "${repo:-.}")" >/dev/null || exit 1
 echo "$task done"
 
 # Implemented when every task in the plan has a task.done event.
@@ -48,7 +53,6 @@ done_ids=$(grep "\"type\":\"task.done\",\"work\":\"$work\"" "$root/events.jsonl"
 missing=$(printf '%s\n' "$all" | while read -r id; do [ -n "$id" ] && ! printf '%s\n' "$done_ids" | grep -qx "$id" && echo "$id"; done)
 [ -n "$missing" ] && exit 0
 
-head="$dir/plan.md"; [ -f "$head" ] || head="$dir/tasks.md"
 now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 tmp="$head.$$"
 awk -v NOW="$now" '
@@ -56,5 +60,5 @@ awk -v NOW="$now" '
   fm == 1 && /^implemented_at:/ { print "implemented_at: " NOW; set = 1; next }
   fm == 1 && $0 == "---" { if (!set) print "implemented_at: " NOW; fm = 2 }
   { print }' "$head" > "$tmp" && mv "$tmp" "$head"
-bash "$here/event.sh" plan.implemented "$work" "{\"tasks\":$(printf '%s\n' "$all" | grep -c .)}" || exit 1
+bash "$here/state.sh" "$spec" implemented work="$work" >/dev/null || exit 1
 echo "$work implemented"

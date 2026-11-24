@@ -5,6 +5,7 @@
 # Example: event.sh spec.approved link-report '{"by":"John Doe"}'
 # Pull request events (multi-repo R8): review.opened {pr,url,repo,tasks,base,after,sha} (after: optional list of "repo#number" PRs to merge first; sha: the head commit pushed); review.restacked {pr,repo,task,base,sha} (sha: the head commit after a restack, fix or update push); review.comment, review.state and
 # review.reply carry the same "repo" (a repo folder as in repos.md). An event without "repo" is the only repo's.
+# Status moves (the types in $moves below) are logged by state.sh only (status-state R7).
 # Held stages (build-status R4): stage.held {stage,reason} when the build or review holds the next stage, and stage.released {stage} when it goes on; subject is the work id, so the UI reads them by work.
 # Inside Claude Code, the event also records the session (CLAUDE_CODE_SESSION_ID).
 
@@ -15,8 +16,10 @@ type="$1"; subject="$2"; data="${3:-}"
 if [ -z "$type" ] || [ -z "$subject" ]; then
   echo "usage: event.sh <type> <subject-id> ['<json object>']" >&2; exit 2
 fi
-# Moves only state.sh logs (status-state R2): it sets FACTREE_STATE_WRITER=1.
-[ "${FACTREE_STATE_WRITER:-}" = 1 ] && types="$types spec.edited review.merged review.closed"
+# Moves only state.sh logs (status-state R2, R7): it sets FACTREE_STATE_WRITER=1. Without it a move is refused, exit 3.
+moves="spec.created spec.approved spec.edited plan.created plan.approved task.started task.done plan.implemented review.opened review.merged review.closed stage.held stage.released"
+if [ "${FACTREE_STATE_WRITER:-}" = 1 ]; then types="$types spec.edited review.merged review.closed"
+else case " $moves " in *" $type "*) echo "$type is a status move: use state.sh" >&2; exit 3 ;; esac; fi
 case " $types " in
   *" $type "*) ;;
   *) echo "unknown event type '$type' (expected one of: $types)" >&2; exit 2 ;;
