@@ -73,6 +73,12 @@ describe("a held stage shows its reason [build-status#R4]", () => {
     expect(progressOf(s, null).stages.find((x) => x.key === "review")!.sub).toBe("Held: acceptance run on SHORT-43 · 22 min");
     expect(renderToStaticMarkup(createElement(SpecLink, { s, active: false }))).toContain("Held: acceptance run on SHORT-43 · 22 min");
   });
+  it("a live activity on the held stage doesn't hide the hold on the row [build-status#R4.S1]", () => {
+    const s = summary([held]);
+    s.plan!.implemented = true;
+    s.activity = { stage: "review", label: "Reviewing", step: "following", since: at(1), paused: false, asking: false } as never;
+    expect(renderToStaticMarkup(createElement(SpecLink, { s, active: false }))).toContain("Held: acceptance run on SHORT-43 · 22 min");
+  });
   it("after stage.released it reads Open the pull request [build-status#R4.S2]", () => {
     const s = summary([held, ev(1, "stage.released", { stage: "review" })]);
     s.plan!.implemented = true;

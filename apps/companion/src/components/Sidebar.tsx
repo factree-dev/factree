@@ -6,16 +6,19 @@ import { CopyCommand, ActivityLine } from "./bits.tsx";
 import { MiniLine } from "./LoopLine.tsx";
 import { waitingLabel } from "../status.ts";
 import { progressOf } from "../progress.ts";
+import { heldSub } from "../stages.ts";
 import { keyWidth, MIN_SIDEBAR, MAX_SIDEBAR } from "../layout.ts";
 
 export function SpecLink({ s, active, waiting = 0 }: { s: SpecSummary; active: boolean; waiting?: number }) {
   const w = waitingLabel(waiting);
   const r = progressOf(s, null, waiting);   // the same place the line reads where the spec is (spec-row R1, D2)
+  const held = r.current ? heldSub(s, r.current) : null;   // a hold wins over a live activity on the row too (build-status R4.S1)
   return (
     <a className={`spec-link${active ? " active" : ""}`} href={`/work/${s.id}`} title={s.title} aria-current={active ? "page" : undefined}>
       <MiniLine summary={s} waiting={waiting} /><span className="id">{s.id}{w && <span className="waiting-count">{w}</span>}</span>
       {s.status === "needs_you" || waiting > 0
         ? <span className="stage-line">Asking you</span>
+        : held ? <span className="stage-line">{held}</span>
         : r.live
           ? <span className="stage-line activity"><ActivityLine a={r.live} /></span>
           : <span className="stage-line">{r.centre}</span>}
