@@ -9,7 +9,7 @@ function html(build: Record<string, TaskBuild>, branchReview?: BranchReview | nu
   const plan = { work: "w", verticals: [{ name: "backend", tasks: ["T1", "T2", "T3", "T4"].map((t) => task(t, t === "T4" ? ["T2"] : [])) }], build, implementedAt: "", branchReview } as unknown as Plan;
   return renderToStaticMarkup(createElement(BuildTab, { plan, specId: "s" }));
 }
-const panel = (o: Partial<BranchReview> = {}): BranchReview => ({ phase: "probing", findings: [], notProbed: [], rounds: [], verdict: "", must: 0, should: 0, ...o });
+const panel = (o: Partial<BranchReview> = {}): BranchReview => ({ phase: "probing", findings: [], notProbed: [], rounds: [], passes: [], verdict: "", must: 0, should: 0, ...o });
 
 describe("Build tab rows", () => {
   it("Reviewing [build-visibility#R2.S1]", () => {
@@ -64,5 +64,27 @@ describe("branch review panel", () => {
   });
   it("no panel before the branch review [build-visibility#R3.S4]", () => {
     expect(html({ T1: { status: "running", phase: "building" } }, null)).not.toContain("Branch review");
+  });
+});
+
+describe("history and passes [build-status]", () => {
+  it("history lists review, fix, review, fix, review in order [build-status#R2.S1]", () => {
+    const history = [{ kind: "review" as const, verdict: "pass/fail", findings: 3, suggestions: 0 }, { kind: "fix" as const, round: 1, cause: "cause-one" }, { kind: "review" as const, verdict: "pass/fail", findings: 1, suggestions: 0 }, { kind: "fix" as const, round: 2, cause: "cause-two" }, { kind: "review" as const, verdict: "pass/pass", findings: 0, suggestions: 0 }];
+    const h = html({ T1: { status: "done", phase: "merged", commit: "a", lines: 1, verdict: "pass/pass", reviewerRecorded: true, history } });
+    expect(h).toContain("<details");
+    const at = ["3 findings", "cause-one", "1 finding", "cause-two", "0 findings"].map((s) => h.indexOf(s));
+    expect(at.every((i, k) => i > -1 && (k === 0 || i > at[k - 1]!))).toBe(true);
+  });
+  it("no fix rounds, no toggle [build-status#R2.S2]", () => {
+    const h = html({ T1: { status: "done", phase: "merged", commit: "a", lines: 1, verdict: "pass/pass", reviewerRecorded: true, suggestions: 1, history: [{ kind: "review", verdict: "pass/pass", findings: 0, suggestions: 1 }] } });
+    expect(h).toContain("reviewed ✓");
+    expect(h).not.toContain("<details");
+  });
+  it("branch panel lists pass 1 with 5 findings, fix round 1, pass 2, Ready [build-status#R3.S1]", () => {
+    const f = (severity: string) => ({ severity, text: "t", evidence: "" });
+    const h = html({}, panel({ phase: "ended", verdict: "ready", passes: [{ findings: [f("must"), f("should"), f("should"), f("should"), f("should")], fix: { round: 1, cause: "pass-cause" } }, { findings: [] }] }));
+    const at = ["Pass 1", "pass-cause", "Pass 2", "Ready: 0 must-fix open"].map((s) => h.indexOf(s));
+    expect(at.every((i, k) => i > -1 && (k === 0 || i > at[k - 1]!))).toBe(true);
+    expect(h.match(/class="sev /g)).toHaveLength(5);
   });
 });
