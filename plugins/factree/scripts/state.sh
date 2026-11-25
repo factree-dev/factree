@@ -232,7 +232,11 @@ cover=""; [ "$move" = plan-approve ] && [ -n "$work" ] && cover=$(covers "$work"
 case "$(status_of "$specf")" in approved|live) init=approved ;; *) init=draft ;; esac
 now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
-out=$(state | awk -v SPEC="$spec" -v MOVE="$move" -v W="$work" -v TASK="$task" -v PR="$pr" -v STAGE="$stage" -v REASON="$reason" \
+# A task whose newest outcome in the log is a failure or block may be started again (a retry), though it was started.
+retry=""
+[ "$move" = build-start ] && [ -n "$task" ] && [ -f "$root/events.jsonl" ] &&
+  [ "$(grep -E "\"type\":\"task\.(started|failed|blocked)\",\"work\":\"$work\"" "$root/events.jsonl" | grep -F "\"task\":\"$task\"" | tail -n1 | sed 's/.*"type":"task\.\([a-z]*\)".*/\1/')" != started ] && retry=1
+out=$(state | awk -v RETRY="$retry" -v SPEC="$spec" -v MOVE="$move" -v W="$work" -v TASK="$task" -v PR="$pr" -v STAGE="$stage" -v REASON="$reason" \
   -v TOTAL="$total" -v NOW="$now" -v INIT="$init" -v COVER="$cover" -f "$here/state-lib.awk")
 case "$out" in
   "already "*)   # an approval a failed write left without its names is filled in; one that has them is left alone

@@ -936,6 +936,8 @@ st link-report plan work=002-link-report >/dev/null; st link-report plan-approve
 check "plan-approve fills the plan's approved_by and approved_at [status-state#R2.S1]" 'grep -q "^approved_by: the flow$" "$WK/plan.md" && grep -q "^approved_at: $(date -u +%Y-%m-%d)$" "$WK/plan.md"'
 st link-report build-start work=002-link-report task=T1 >/dev/null; out=$(st link-report build-start work=002-link-report task=T1); st link-report build-start work=002-link-report task=T2 >/dev/null
 check "build-start per task: the plan building, a task.started each, a repeat already [status-state#R3.S1]" 'grep -q "\"plan.002-link-report\": \"building\"" "$SF" && [ $(grep -c "\"type\":\"task.started\".*\"task\":\"T[12]\"" "$W/events.jsonl") -eq 2 ] && echo "$out" | grep -q "already"'
+FACTREE_HOME="$W" bash $EVENT task.failed 002-link-report '{"task":"T1","reason":"over budget"}'; out=$(st link-report build-start work=002-link-report task=T1); out2=$(st link-report build-start work=002-link-report task=T1)
+check "a failed task started again logs task.started once more, a plain repeat does not [status-state#R3.S1]" '[ $(grep -c "\"type\":\"task.started\".*\"task\":\"T1\"" "$W/events.jsonl") -eq 2 ] && echo "$out2" | grep -q already && ! echo "$out" | grep -q already'
 for n in 1 2 3 4 5; do st link-report task-done work=002-link-report task=T$n >/dev/null; done
 st link-report implemented work=002-link-report >/dev/null
 st link-report review-open work=002-link-report pr=11 >/dev/null; st link-report review-open work=002-link-report pr=12 >/dev/null

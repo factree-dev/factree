@@ -1,5 +1,5 @@
 # The moves of state.sh (status-state R3, D4): reads a spec's state file, applies one move.
-# Variables: SPEC MOVE W TASK PR STAGE REASON TOTAL NOW, INIT (the spec stage when there is no state yet), and COVER
+# Variables: RETRY (a started task whose newest outcome failed or blocked), SPEC MOVE W TASK PR STAGE REASON TOTAL NOW, INIT (the spec stage when there is no state yet), and COVER
 # ("cover.<work>.<R>=<sum>;…", the plan's covered requirements as they read now, for plan-approve: D3).
 # Prints "ok", "already <message>" or "refuse <message>"; after "ok", one "<key>\t<value>" line per key of the
 # new state. A line it can't read refuses every move.
@@ -61,12 +61,12 @@ END {
     else { V["plan." W] = "approved"; setcovers() }
   } else if (MOVE == "build-start") {
     if (TASK != "" && p == "building") started = (("started." W) in V) ? V["started." W] : ""
-    if (p == "implemented" || (p == "building" && (TASK == "" || inlist(started, TASK)))) say("already", W " is already " p)
+    if (p == "implemented" || (p == "building" && (TASK == "" || (inlist(started, TASK) && !RETRY)))) say("already", W " is already " p)
     else if (p != "approved" && p != "building") refuse(W, "started", "it is " pis)
     else if (TASK != "") {   # per task: the first moves the plan to building; each is logged as started once
       started = (("started." W) in V) ? V["started." W] : ""
-      if (inlist(started, TASK)) say("already", TASK " is already started in " W)
-      else { V["plan." W] = "building"; V["started." W] = (started == "") ? TASK : started " " TASK }
+      if (inlist(started, TASK) && !RETRY) say("already", TASK " is already started in " W)
+      else { V["plan." W] = "building"; if (!inlist(started, TASK)) V["started." W] = (started == "") ? TASK : started " " TASK }
     }
     else V["plan." W] = "building"
   } else if (MOVE == "task-done") {
