@@ -90,13 +90,17 @@ function liveFor(specId, spec, events, sessions, now = Date.now()) {
 		session: open ? sessionFor(lastAny?.cwd, sessions) : null
 	};
 }
-/** What the UI shows for a spec (spec-status R2–R5). */
-function displayStatus(fileStatus, live, lastMoved, now) {
-	if (live.open) {
+/** What the UI shows for a spec (spec-status R2–R5). With a recorded stage (status-state R5, D5), live activity only
+*  says whether a writing spec needs you, is being written or is paused; it never changes an approved or draft one. */
+function displayStatus(fileStatus, live, lastMoved, now, stage) {
+	if (stage === "approved") return fileStatus === "live" ? "live" : "approved";
+	if (stage && stage !== "writing") return "draft";
+	if (live.open || stage === "writing") {
 		const working = live.session?.state === "working";
 		if ((live.pendingQuestion || live.step === "approval" || live.session?.state === "waiting") && !working) return "needs_you";
 		if (lastMoved !== null && now - Date.parse(lastMoved) < 6e5 || working) return "writing";
 	}
+	if (stage === "writing") return "paused";
 	return fileStatus ?? "draft";
 }
 var WRITING_STEP = {
@@ -1214,21 +1218,49 @@ function isStale(plan, events, spec) {
 	if (made) return Boolean(changed && changed > made && !(built && built >= changed));
 	return Boolean(spec?.updated && plan.specUpdated && spec.updated > plan.specUpdated);
 }
-function brief(plans, events = []) {
+/** The newest plan in brief. With a state that records it, its stage, counts, review and hold are the state's
+*  (status-state R5); task details and comments still come from events. */
+function brief(plans, events = [], st = null) {
 	const p = plans[0];
 	if (!p) return null;
 	const builds = Object.values(p.build);
-	return {
+	const w = st?.works[p.work];
+	const base = {
 		work: p.work,
-		status: p.status,
 		approvedAt: p.approvedAt,
 		others: plans.length - 1,
+		...p.branchReview ? { branchReview: p.branchReview } : {}
+	};
+	if (w) return {
+		...base,
+		status: w.stage !== "planned" ? "approved" : p.status === "approved" ? "draft" : p.status,
+		tasks: w.total || builds.length,
+		done: w.done,
+		implemented: w.stage === "implemented",
+		review: stateReview(reviewOf(p.work, events), w),
+		...w.hold ? { hold: w.hold } : {}
+	};
+	return {
+		...base,
+		status: p.status,
 		tasks: builds.length,
 		done: builds.filter((b) => b.status === "done").length,
 		implemented: Boolean(p.implementedAt),
 		review: reviewOf(p.work, events),
-		...p.branchReview ? { branchReview: p.branchReview } : {},
 		...holdFor(p.work, events)
+	};
+}
+/** The review as the state records it: none, merged or closed say so; open keeps the newest pull request's own state
+*  unless that one says merged or closed. */
+function stateReview(r, w) {
+	if (w.review === "none") return null;
+	const state = w.review === "merged" ? "MERGED" : w.review === "closed" ? "CLOSED" : r && r.state !== "MERGED" && r.state !== "CLOSED" ? r.state : "OPEN";
+	return {
+		...r ?? {
+			url: "",
+			comments: []
+		},
+		state
 	};
 }
 /** The work's current hold (build-status R4, D3): the last stage.held, cleared by a stage.released for that stage;
@@ -1306,7 +1338,7 @@ function reviewOf(work, events) {
 /** Stale stages and the round (spec-ring R4). A stage after Spec is stale when it last finished before the latest spec
 *  change and hasn't finished since. A spec change starts a new round only once the work went out for review since
 *  the round began; each request for changes is a round too. */
-function loopOf(id, works, events, verifyOn = false) {
+function loopOf(id, works, events, verifyOn = false, st = null) {
 	const finished = {};
 	let round = 1, reviewed = false, updated = null;
 	for (const e of events) {
@@ -1325,6 +1357,20 @@ function loopOf(id, works, events, verifyOn = false) {
 			updated = e.ts;
 		} else if (e.type === "review.state" && e.data.state === "CHANGES_REQUESTED") round++;
 		if (e.type === "review.state" && e.data.state === "MERGED") finished.merged = e.ts;
+	}
+	const w = st?.works[st.plan];
+	if (w) {
+		const s = w.stale;
+		return {
+			stale: [
+				false,
+				s,
+				s && w.stage === "implemented",
+				...verifyOn ? [s && Boolean(finished.verify)] : [],
+				s && w.review !== "none"
+			],
+			round
+		};
 	}
 	const before = (k) => Boolean(updated && finished[k] && finished[k] < updated);
 	const stale = [false];
@@ -1518,7 +1564,7 @@ function branchReviewOf(work, events, now = Date.now()) {
 	return br;
 }
 /** Every plan in `work/`, newest (highest number) first. A folder with no plan, design or task file isn't a plan (plan-view R11.S3). */
-function readPlans(root, events = [], specs = /* @__PURE__ */ new Map(), live = []) {
+function readPlans(root, events = [], specs = /* @__PURE__ */ new Map(), live = [], states = /* @__PURE__ */ new Map()) {
 	const dir = join(root, "work");
 	if (!existsSync(dir)) return [];
 	const out = [];
@@ -1547,7 +1593,7 @@ function readPlans(root, events = [], specs = /* @__PURE__ */ new Map(), live = 
 			} } };
 		}
 		const p = parsePlan(work, files);
-		p.stale = isStale(p, events, specs.get(p.spec));
+		p.stale = states.get(p.spec)?.works[work]?.stale ?? isStale(p, events, specs.get(p.spec));
 		p.sessions = sessionsFor(events, (e) => e.work === work, live);
 		p.build = buildStatus(p, events);
 		p.branchReview = branchReviewOf(work, events);
@@ -1555,9 +1601,139 @@ function readPlans(root, events = [], specs = /* @__PURE__ */ new Map(), live = 
 	}
 	return out;
 }
+// server/state.ts
+var TABLE = (/* @__PURE__ */ new Uint32Array(256)).map((_, i) => {
+	let c = i << 24;
+	for (let k = 0; k < 8; k++) c = c & 2147483648 ? c << 1 ^ 79764919 : c << 1;
+	return c >>> 0;
+});
+function cksum(bytes) {
+	let c = 0;
+	const add = (b) => {
+		c = (c << 8 ^ TABLE[(c >>> 24 ^ b) & 255]) >>> 0;
+	};
+	for (const b of bytes) add(b);
+	for (let n = bytes.length; n > 0; n = Math.floor(n / 256)) add(n & 255);
+	return ~c >>> 0;
+}
+var read = (p) => existsSync(p) ? readFileSync(p, "latin1") : null;
+var lines = (t) => t.split("\n").map((l) => l.replace(/\r$/, ""));
+var front = (t) => {
+	const l = lines(t);
+	if (l[0] !== "---") return [];
+	const end = l.indexOf("---", 1);
+	return l.slice(1, end < 0 ? l.length : end);
+};
+/** A front-matter value, as state.sh's fm() reads it. */
+function fm(t, key) {
+	const l = front(t).find((x) => x.startsWith(key + ":"));
+	return l === void 0 ? "" : l.replace(/^[^:]*: */, "").replace(/ +#.*/, "");
+}
+/** "<crc> <size>" of each requirement in the plan's scope as the spec reads now: its block from the heading to the next,
+*  whitespace collapsed, Source: lines left out; retired ones not at all (state.sh covers). */
+function covers(root, work, specText) {
+	const out = /* @__PURE__ */ new Map();
+	const head = read(join(root, "work", work, "plan.md")) ?? read(join(root, "work", work, "tasks.md"));
+	if (head === null) return out;
+	const scope = ` ${fm(head, "scope").replace(/[[\],]/g, "")} `;
+	const gone = /* @__PURE__ */ new Set();
+	for (const l of front(specText)) if (/^retired:/.test(l)) l.replace(/[[\],]/g, " ").trim().split(/\s+/).slice(1).forEach((r) => gone.add(r));
+	let id = "", txt = "";
+	const flush = () => {
+		if (id && scope.includes(` ${id} `) && !gone.has(id)) {
+			const text = txt.replace(/[ \t\r]+/g, " ").replace(/^ /, "").replace(/ $/, "");
+			out.set(`cover.${work}.${id}`, `${cksum(Buffer.from(text, "latin1"))} ${text.length}`);
+		}
+		id = "";
+		txt = "";
+	};
+	const all = lines(specText);
+	const body = all[0] === "---" ? all.slice(all.indexOf("---", 1) < 0 ? all.length : all.indexOf("---", 1) + 1) : all;
+	for (const l of body) {
+		if (/^## /.test(l) || /^### /.test(l) && !/^### Requirement:/.test(l)) {
+			flush();
+			continue;
+		}
+		if (/^### Requirement: R[0-9]+/.test(l)) {
+			flush();
+			id = l.trim().split(/[ \t]+/)[2] ?? "";
+		}
+		if (id && !/^[ \t]*Source:/.test(l)) txt += " " + l;
+	}
+	flush();
+	return out;
+}
+/** The spec's state, or null with no state file. One that can't be read, or records no spec stage, is null too: the
+*  caller reads that spec as before, and one state file never fails the UI (design). */
+function readState(root, id) {
+	try {
+		return parseState(root, id);
+	} catch (e) {
+		console.error(`state/${id}.json can't be read (${e.message}); reading ${id} from events`);
+		return null;
+	}
+}
+function parseState(root, id) {
+	const text = read(join(root, "state", `${id}.json`));
+	if (text === null) return null;
+	const kv = /* @__PURE__ */ new Map();
+	for (const l of text.split("\n")) {
+		if (l === "{" || l === "}" || l === "") continue;
+		const m = /^ {2}"([^"]*)": "([^"]*)",?$/.exec(l);
+		if (!m) {
+			console.error(`state/${id}.json is not readable; reading ${id} from events`);
+			return null;
+		}
+		kv.set(m[1], m[2]);
+	}
+	if (!kv.has("spec")) {
+		console.error(`state/${id}.json records no spec stage; reading ${id} from events`);
+		return null;
+	}
+	const specText = read(join(root, "specs", `${id}.md`));
+	const works = {};
+	for (const [k, stage] of kv) {
+		if (!k.startsWith("plan.")) continue;
+		const w = k.slice(5), get = (p) => kv.get(`${p}.${w}`) ?? "";
+		const list = (p) => get(p).split(" ").filter(Boolean);
+		const held = get("hold"), sp = held.indexOf(" ");
+		const review = get("review") || "none";
+		let stale = false;
+		if (specText !== null && [
+			"approved",
+			"building",
+			"implemented"
+		].includes(stage)) {
+			const stored = [...kv].filter(([x]) => x.startsWith(`cover.${w}.`));
+			const have = new Map(stored);
+			let bad = false, hit = 0;
+			for (const [x, sum] of covers(root, w, specText)) if (have.get(x) !== sum) bad = true;
+			else hit++;
+			stale = bad || review !== "merged" && hit !== stored.length;
+		}
+		works[w] = {
+			stage,
+			done: list("tasks").length,
+			total: Number(get("total") || 0),
+			review,
+			prs: list("prs"),
+			stale,
+			...held ? { hold: {
+				stage: sp < 0 ? held : held.slice(0, sp),
+				reason: sp < 0 ? "" : held.slice(sp + 1),
+				since: get("hold_since")
+			} } : {}
+		};
+	}
+	return {
+		spec: kv.get("spec"),
+		plan: kv.get("plan") ?? "",
+		works
+	};
+}
 // server/workspace.ts
 /** A spec's summary, or null for a run that has gone quiet without ever writing a file. */
-function summarize(id, spec, events, sessions, now, plans = []) {
+function summarize(id, spec, events, sessions, now, plans = [], st = null) {
 	const live = liveFor(id, spec, events, sessions, now);
 	if (!spec && !live.open) return null;
 	const mine = events.filter((e) => e.spec === id);
@@ -1570,7 +1746,7 @@ function summarize(id, spec, events, sessions, now, plans = []) {
 	return {
 		id,
 		title: spec?.title ?? String(firstStep?.data.title ?? id),
-		status: displayStatus(spec?.status ?? null, live, lastMoved, now),
+		status: displayStatus(spec?.status ?? null, live, lastMoved, now, st?.spec),
 		lastMoved,
 		lastActivity,
 		activity: activityOf(id, events, plans, now),
@@ -1579,9 +1755,9 @@ function summarize(id, spec, events, sessions, now, plans = []) {
 		scenarios: spec?.requirements.reduce((n, r) => n + r.scenarios.length, 0) ?? 0,
 		openQuestions: spec?.questions.length ?? 0,
 		live,
-		plan: brief(plans, events),
+		plan: brief(plans, events, st),
 		verify: latestVerify(id, events, false),
-		loop: loopOf(id, works, events)
+		loop: loopOf(id, works, events, void 0, st)
 	};
 }
 /** a is a later version than b, comparing x.y.z number by number (0.10.0 > 0.9.0). */
@@ -1594,14 +1770,15 @@ function workspaceState(root, user, now = Date.now(), repo = null, running = "")
 	const specs = readSpecs(root);
 	const events = readEvents(root);
 	const sessions = readSessions(root, now);
-	const plans = readPlans(root, events, specs, sessions);
+	const states = new Map([...specs.keys()].map((id) => [id, readState(root, id)]));
+	const plans = readPlans(root, events, specs, sessions, states);
 	const ids = new Set(specs.keys());
 	for (const e of events) if (e.type === "spec.step" && e.spec) ids.add(e.spec);
 	const summaries = [];
 	const waiting = [];
 	for (const id of ids) {
 		const spec = specs.get(id);
-		const summary = summarize(id, spec, events, sessions, now, plans.filter((p) => p.spec === id));
+		const summary = summarize(id, spec, events, sessions, now, plans.filter((p) => p.spec === id), states.get(id) ?? null);
 		if (!summary) continue;
 		summaries.push(summary);
 		const { live } = summary;
@@ -1660,8 +1837,9 @@ function specDetail(root, id, now = Date.now()) {
 	const events = readEvents(root);
 	const sessions = readSessions(root, now);
 	const spec = specs.get(id) ?? null;
-	const plans = readPlans(root, events, specs, sessions).filter((p) => p.spec === id);
-	const summary = summarize(id, spec ?? void 0, events, sessions, now, plans);
+	const st = readState(root, id);
+	const plans = readPlans(root, events, specs, sessions, /* @__PURE__ */ new Map([[id, st]])).filter((p) => p.spec === id);
+	const summary = summarize(id, spec ?? void 0, events, sessions, now, plans, st);
 	if (!summary) return null;
 	const activity = events.filter((e) => e.spec === id).slice(-40).reverse();
 	const calls = events.filter((e) => e.spec === id && e.type === "decision.recorded" && e.data.call === true).map((e) => ({
@@ -1693,7 +1871,11 @@ function fingerprint(root) {
 		}
 	};
 	add(join(root, "events.jsonl"));
-	for (const d of ["specs", "sessions"]) {
+	for (const d of [
+		"specs",
+		"sessions",
+		"state"
+	]) {
 		const dir = join(root, d);
 		add(dir);
 		if (existsSync(dir)) for (const f of readdirSync(dir)) add(join(dir, f));

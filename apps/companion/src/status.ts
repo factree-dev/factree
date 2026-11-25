@@ -9,6 +9,7 @@ export type StatusIconName = "crane" | "bell" | "pencil" | "check" | "rocket";
 export const STATUS_META: Record<DisplayStatus, { label: string; icon: StatusIconName; animated: boolean }> = {
   needs_you: { label: "Needs you", icon: "bell", animated: true },
   writing: { label: "Writing", icon: "crane", animated: true },
+  paused: { label: "Writing (paused)", icon: "pencil", animated: false },
   draft: { label: "Draft", icon: "pencil", animated: false },
   approved: { label: "Approved", icon: "check", animated: false },
   live: { label: "Live", icon: "rocket", animated: false },

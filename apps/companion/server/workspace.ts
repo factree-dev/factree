@@ -8,9 +8,10 @@ import { waitingDecisions } from "./decisions.ts";
 import { readEvents, readSessions, readSpecs, isDir } from "./read.ts";
 import { sessionsFor, liveFor, displayStatus, activityOf } from "./live.ts";
 import { latestVerify, brief, loopOf, readPlans } from "./loop.ts";
+import { readState, type SpecState } from "./state.ts";
 
 /** A spec's summary, or null for a run that has gone quiet without ever writing a file. */
-function summarize(id: string, spec: Spec | undefined, events: FactreeEvent[], sessions: Session[], now: number, plans: Plan[] = []): SpecSummary | null {
+function summarize(id: string, spec: Spec | undefined, events: FactreeEvent[], sessions: Session[], now: number, plans: Plan[] = [], st: SpecState | null = null): SpecSummary | null {
   const live = liveFor(id, spec, events, sessions, now);
   if (!spec && !live.open) return null;
   const mine = events.filter((e) => e.spec === id);
@@ -24,7 +25,7 @@ function summarize(id: string, spec: Spec | undefined, events: FactreeEvent[], s
   return {
     id,
     title: spec?.title ?? String(firstStep?.data.title ?? id),
-    status: displayStatus(spec?.status ?? null, live, lastMoved, now),
+    status: displayStatus(spec?.status ?? null, live, lastMoved, now, st?.spec),
     lastMoved,
     lastActivity,
     activity: activityOf(id, events, plans, now),
@@ -33,9 +34,9 @@ function summarize(id: string, spec: Spec | undefined, events: FactreeEvent[], s
     scenarios: spec?.requirements.reduce((n, r) => n + r.scenarios.length, 0) ?? 0,
     openQuestions: spec?.questions.length ?? 0,
     live,
-    plan: brief(plans, events),
+    plan: brief(plans, events, st),
     verify: latestVerify(id, events, false),
-    loop: loopOf(id, works, events),
+    loop: loopOf(id, works, events, undefined, st),
   };
 }
 
@@ -53,7 +54,8 @@ export function workspaceState(root: string, user: string, now = Date.now(), rep
   const specs = readSpecs(root);
   const events = readEvents(root);
   const sessions = readSessions(root, now);
-  const plans = readPlans(root, events, specs, sessions);
+  const states = new Map([...specs.keys()].map((id) => [id, readState(root, id)]));   // recorded states (status-state R5)
+  const plans = readPlans(root, events, specs, sessions, states);
 
   const ids = new Set<string>(specs.keys());
   for (const e of events) if (e.type === "spec.step" && e.spec) ids.add(e.spec);
@@ -62,7 +64,7 @@ export function workspaceState(root: string, user: string, now = Date.now(), rep
   const waiting: WaitingItem[] = [];
   for (const id of ids) {
     const spec = specs.get(id);
-    const summary = summarize(id, spec, events, sessions, now, plans.filter((p) => p.spec === id));
+    const summary = summarize(id, spec, events, sessions, now, plans.filter((p) => p.spec === id), states.get(id) ?? null);
     if (!summary) continue;
     summaries.push(summary);
     const { live } = summary;
@@ -101,8 +103,9 @@ export function specDetail(root: string, id: string, now = Date.now()): SpecDeta
   const events = readEvents(root);
   const sessions = readSessions(root, now);
   const spec = specs.get(id) ?? null;
-  const plans = readPlans(root, events, specs, sessions).filter((p) => p.spec === id);
-  const summary = summarize(id, spec ?? undefined, events, sessions, now, plans);
+  const st = readState(root, id);
+  const plans = readPlans(root, events, specs, sessions, new Map([[id, st]])).filter((p) => p.spec === id);
+  const summary = summarize(id, spec ?? undefined, events, sessions, now, plans, st);
   if (!summary) return null;
   const activity = events.filter((e) => e.spec === id).slice(-40).reverse();
   const calls = events.filter((e) => e.spec === id && e.type === "decision.recorded" && e.data.call === true)
@@ -117,7 +120,7 @@ export function fingerprint(root: string): string {
     try { const s = statSync(p); parts.push(`${p}:${s.mtimeMs}:${s.size}`); } catch { parts.push(`${p}:-`); }
   };
   add(join(root, "events.jsonl"));
-  for (const d of ["specs", "sessions"]) {
+  for (const d of ["specs", "sessions", "state"]) {
     const dir = join(root, d);
     add(dir);
     if (existsSync(dir)) for (const f of readdirSync(dir)) add(join(dir, f));

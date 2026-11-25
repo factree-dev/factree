@@ -8,8 +8,8 @@ import type { SpecSummary } from "../shared/types.ts";
 const statuses = Object.keys(STATUS_META) as (keyof typeof STATUS_META)[];
 
 describe("STATUS_META", () => {
-  it("labels the five statuses [spec-status#R1.S1]", () => {
-    expect(statuses.map((s) => STATUS_META[s].label)).toEqual(["Needs you", "Writing", "Draft", "Approved", "Live"]);
+  it("labels the five statuses, and a paused writing stage [spec-status#R1.S1, status-state#D5]", () => {
+    expect(statuses.map((s) => STATUS_META[s].label)).toEqual(["Needs you", "Writing", "Writing (paused)", "Draft", "Approved", "Live"]);
   });
 
   it("gives every status its own icon [spec-status#R6.S1]", () => {

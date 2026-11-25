@@ -33,7 +33,7 @@ export function progressOf(s: SpecSummary, spec: Spec | null, waiting = 0, verif
   const currentIdx = done.findIndex((d) => !d);
   const plan = s.plan, vr = s.verify;
   const fills = keep([
-    specDone ? 1 : s.status === "writing" || s.status === "needs_you" ? STEP_FILL[s.live.step ?? ""] ?? 0.1 : s.hasFile ? 0.1 : 0,
+    specDone ? 1 : s.status === "writing" || s.status === "paused" || s.status === "needs_you" ? STEP_FILL[s.live.step ?? ""] ?? 0.1 : s.hasFile ? 0.1 : 0,
     !plan ? 0 : plan.status === "approved" ? 1 : plan.status === "design-approved" ? 0.66 : 0.33,
     !plan || plan.status !== "approved" ? 0 : plan.implemented ? 1 : plan.tasks ? plan.done / plan.tasks : 0,
     v.done ? 1 : vr && plan?.implemented ? (() => { const n = vr.proved + vr.failing + vr.unverified - (vr.manual ?? 0); return n > 0 ? vr.proved / n : 0; })() : 0,
