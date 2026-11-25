@@ -41,7 +41,7 @@ Log `bash <plugin>/scripts/event.sh stage.step <spec-id> '{"stage":"review","ste
 **Then push and open, in merge order,** so each earlier number exists when a later one needs it:
 1. Push the pull request's head, once, by the rule in step 8. If a `review.opened` for this work already names this pull request and it's still open (`gh -R <owner/repo> pr view <n> --json state`), the push updates it: say so, don't open another (R1.S3), and skip 2 and 3. Otherwise it's a new branch with no recorded sha, so no previous tip: step 8 pushes it plain with `-u`.
 2. Write the description to a file and run `gh pr create -R <owner/repo> --head <head> --base <base> --title "<spec title>: <tasks>" --body-file <file>`. The `base` is from the list: the repo's base branch, or the head of the pull request it's stacked on.
-3. Log `review.opened` on the work id with `{"pr","url","repo","tasks":["T1"],"base","after","sha"}`; `sha` is `git -C <repo> rev-parse <head>`, the commit just pushed. `after` maps each of the line's `after` entries to `repo#number`: a head branch to its pull request in the same repo, `repo#T1+T2` to the numbers of the pull requests holding those tasks.
+3. Run `bash <plugin>/scripts/state.sh <spec-id> review-open work=<work-id> pr=<n> repo=<repo>`, with `url=`, `tasks=T1,T2`, `base=`, `after=` and `sha=` as more fields. `sha` is `git -C <repo> rev-parse <head>`, the commit just pushed. `after` maps each of the line's `after` entries to `repo#number`: a head branch to its pull request in the same repo, `repo#T1+T2` to the numbers of the pull requests holding those tasks.
 
 **If a push or an open fails part way,** undo it (D16): close every pull request this run opened (`gh -R <owner/repo> pr close <n>`), delete the branches it created (`git -C <repo> push origin --delete <head>`, in the repo each was pushed to; the one push outside step 8, as it only removes what this run made), and report what failed and what was undone. Never leave a half-opened set, because it breaks the merge order. Note before each push whether the head already existed on the remote; one that did is left alone.
 
@@ -90,7 +90,7 @@ Show every link.
 ### 4. Follow the review (review R3)
 
 Start one `bash <plugin>/scripts/wait-review.sh <work> <repo> <pr>` per pull request with `run_in_background`, then end your turn. Each checks its pull request, in its repo, every 5 minutes, logs each new comment (`review.comment`) and each change of state (`review.state`), and exits when there's something new, which wakes this session. Keep one wait per pull request. When one ends:
-- **Merged or closed:** say so. Don't start another wait for it. If an open pull request is stacked on it, go to step 8. Review is done when every pull request is.
+- **Merged or closed:** say so. Run `state.sh <spec-id> merged work=<work-id> pr=<n>` (or `closed`; per pull request, the review is merged when all are, and the follower has usually recorded it already, so a repeat says so). Don't start another wait for it. If an open pull request is stacked on it, go to step 8. Review is done when every pull request is.
 - **Approved:** say it's ready for the reviewers or the user to merge. Never merge it yourself.
 - **Comments:** go on to step 5.
 - **CONFLICTING:** the pull request no longer merges cleanly with its base, usually because something else merged first. Go to step 7.
@@ -160,7 +160,9 @@ A pull request stacked on another carries the other's commits, and a squash merg
 
 ## Logging events
 
-`bash <plugin>/scripts/event.sh <type> <work> '<json>'`: `review.opened` `{"pr","url","repo","tasks","base","after","sha"}`, `review.reply` `{"pr","repo","comment","kind","commit"}`, `review.restacked` `{"pr","repo","task","base","sha"}`. `review.comment` and `review.state` come from `wait-review.sh`, never by hand.
+A move `state.sh` refuses (exit 3) is reported to the user, never logged around it.
+
+`bash <plugin>/scripts/event.sh <type> <work> '<json>'`: `review.reply` `{"pr","repo","comment","kind","commit"}`, `review.restacked` `{"pr","repo","task","base","sha"}`. `review.comment` and `review.state` come from `wait-review.sh`, never by hand.
 
 Run `bash <plugin>/scripts/link.sh <spec-id> <work>` when the pull request opens and end your message with its line, if any.
 

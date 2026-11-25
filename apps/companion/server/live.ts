@@ -79,15 +79,19 @@ export function liveFor(specId: string, spec: Spec | undefined, events: FactreeE
   };
 }
 
-/** What the UI shows for a spec (spec-status R2–R5). */
-export function displayStatus(fileStatus: SpecStatus | null, live: Live, lastMoved: string | null, now: number): DisplayStatus {
-  if (live.open) {
+/** What the UI shows for a spec (spec-status R2–R5). With a recorded stage (status-state R5, D5), live activity only
+ *  says whether a writing spec needs you, is being written or is paused; it never changes an approved or draft one. */
+export function displayStatus(fileStatus: SpecStatus | null, live: Live, lastMoved: string | null, now: number, stage?: string): DisplayStatus {
+  if (stage === "approved") return fileStatus === "live" ? "live" : "approved";
+  if (stage && stage !== "writing") return "draft";
+  if (live.open || stage === "writing") {
     const working = live.session?.state === "working";
     const blocked = live.pendingQuestion || live.step === "approval" || live.session?.state === "waiting";
     if (blocked && !working) return "needs_you";
     const recent = lastMoved !== null && now - Date.parse(lastMoved) < PAUSED_AFTER_MS;
     if (recent || working) return "writing";
   }
+  if (stage === "writing") return "paused";
   return fileStatus ?? "draft";   // a paused run keeps the file status; no file yet reads as a draft
 }
 

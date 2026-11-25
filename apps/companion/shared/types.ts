@@ -3,7 +3,8 @@
 export type SpecStatus = "draft" | "approved" | "live";
 
 // What the UI shows for a spec: its file status, unless a run is in progress (spec-status R1).
-export type DisplayStatus = "needs_you" | "writing" | "draft" | "approved" | "live";
+// "paused": a recorded writing stage with no activity for 10 minutes (status-state D5).
+export type DisplayStatus = "needs_you" | "writing" | "paused" | "draft" | "approved" | "live";
 
 export interface Scope { in: string; out: string; anti: string }   // anti: what would make it a failure (spec-writing R2)
 

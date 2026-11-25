@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -73,6 +74,8 @@ describe("waiting decisions", () => {
 import { applyDecision, checkDecisionRequest } from "../server/decisions.ts";
 describe("deciding in the companion", () => {
   const decide = (body: object) => applyDecision(root, "John Doe", body, workspaceState(root, "John Doe", NOW).decisions, "2026-11-17");
+  const stateSh = fileURLToPath(new URL("../../../plugins/factree/scripts/state.sh", import.meta.url));
+  const state = (...a: string[]) => execFileSync("bash", [stateSh, ...a], { env: { ...process.env, FACTREE_HOME: root }, cwd: join(root, ".."), encoding: "utf8" });
   const log = () => readFileSync(join(root, "events.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
 
   it("answers a question [companion-decisions#R3.S1]", () => {
@@ -92,13 +95,125 @@ describe("deciding in the companion", () => {
     decide({ kind: "approve-spec", spec: "version-check" });
     const text = readFileSync(join(root, "specs", "version-check.md"), "utf8");
     expect(text).toMatch(/^status: approved$/m);
+    expect(state("version-check", "show")).toContain('"spec": "approved"');   // [status-state#R7.S1]
     expect(text).toMatch(/^approved_by: John Doe \(via companion\)$/m);
     expect(text).toMatch(/^approved_at: 2026-11-17$/m);
-    expect(log().at(-1)).toMatchObject({ type: "spec.approved", spec: "version-check", data: { by: "John Doe", via: "companion" } });
+    expect(log().at(-1)).toMatchObject({ type: "spec.approved", spec: "version-check", data: { move: "approve", by: "John Doe", via: "companion" } });
+  });
+
+  it("approving in the companion runs state.sh approve with by and via, state reads approved [status-state#R7.S1]", () => {
+    spec("version-check", "draft");
+    events([]);
+    decide({ kind: "approve-spec", spec: "version-check" });
+    expect(state("version-check", "show")).toMatch(/"spec": "approved"/);
+    expect(log().filter((e) => e.type === "spec.approved")).toHaveLength(1);
+    expect(log().at(-1).data).toMatchObject({ move: "approve", by: "John Doe", via: "companion" });
+  });
+
+  const design = "## Patterns\n\n### Reused\n- **P1 X:** `a.ts:1`. Fits.\n\n### New\nNone.\n";
+
+  it("approving an approved spec again answers and changes nothing [status-state#R2.S3]", () => {
+    spec("version-check", "draft");
+    events([]);
+    decide({ kind: "approve-spec", spec: "version-check" });
+    const file = join(root, "specs", "version-check.md");
+    const before = readFileSync(file, "utf8"), n = log().length;
+    expect(() => decide({ kind: "approve-spec", spec: "version-check" })).not.toThrow();
+    expect(readFileSync(file, "utf8")).toBe(before);
+    expect(log()).toHaveLength(n);
+  });
+
+  it("a repeat approval fills in approved_by and approved_at a failed write left out, without a new event [status-state#R7.S1]", () => {
+    spec("version-check", "draft");
+    events([]);
+    decide({ kind: "approve-spec", spec: "version-check" });
+    const file = join(root, "specs", "version-check.md");
+    writeFileSync(file, readFileSync(file, "utf8").replace(/^approved_(by|at):.*\n/gm, ""));
+    const n = log().length;
+    decide({ kind: "approve-spec", spec: "version-check" });
+    const text = readFileSync(file, "utf8");
+    expect(text).toMatch(/^approved_by: John Doe \(via companion\)$/m);
+    expect(text).toMatch(/^approved_at: 2026-11-17$/m);
+    expect(log().filter((e) => e.type === "spec.approved")).toHaveLength(1);
+    expect(log()).toHaveLength(n);
+  });
+
+  it("a draft spec nobody is waiting on is 409 and nothing is written [companion-decisions#R10.S2]", () => {
+    spec("version-check", "draft");
+    events([{ ts: at(1), type: "spec.step", spec: "version-check", data: { step: "gaps" } }]);   // still being written: no card
+    const file = join(root, "specs", "version-check.md");
+    const before = readFileSync(file, "utf8"), n = log().length;
+    expect(() => decide({ kind: "approve-spec", spec: "version-check" })).toThrow("isn't waiting");
+    expect(readFileSync(file, "utf8")).toBe(before);
+    expect(log()).toHaveLength(n);
+    expect(existsSync(join(root, "state", "version-check.json"))).toBe(false);
+  });
+
+  it("a card blocked by an open question is 409 with the reason and nothing is written [companion-decisions#R4.S2]", () => {
+    spec("version-check", "draft");
+    events([
+      { ts: at(20), type: "spec.step", spec: "version-check", data: { step: "approval" } },
+      { ts: at(10), type: "question.asked", spec: "version-check", data: { n: 2, text: "Which signal?", why: "", proposal: "Local" } },
+    ]);
+    const file = join(root, "specs", "version-check.md");
+    const before = readFileSync(file, "utf8"), n = log().length;
+    expect(() => decide({ kind: "approve-spec", spec: "version-check" })).toThrow("Answer question 2 first");
+    expect(readFileSync(file, "utf8")).toBe(before);
+    expect(log()).toHaveLength(n);
+  });
+
+  it("a refused move returns 409 with the script's message [status-state#R7.S1]", () => {
+    spec("version-check", "approved");
+    plan("015-build", "version-check", design);
+    events([]);
+    mkdirSync(join(root, "state"), { recursive: true });
+    writeFileSync(join(root, "state", "version-check.json"), "{\n  not json\n}\n");   // a state file state.sh can't read refuses every move
+    const err = (() => { try { decide({ kind: "approve-plan", work: "015-build" }); } catch (e) { return e as { status: number; message: string }; } })();
+    expect(err).toMatchObject({ status: 409 });
+    expect(err!.message).toMatch(/not readable/);
+    expect(readFileSync(join(root, "work", "015-build", "plan.md"), "utf8")).not.toMatch(/^status: approved$/m);
+  });
+
+  it("un-migrated workspace (no state/): approving a plan seeds the state and it reads approved [status-state#R7.S1]", () => {
+    spec("version-check", "approved");
+    plan("015-build", "version-check", design);
+    events([]);
+    decide({ kind: "approve-plan", work: "015-build" });   // no state/ before this
+    expect(state("version-check", "show")).toMatch(/"plan.015-build": "approved"/);
+    expect(readFileSync(join(root, "work", "015-build", "plan.md"), "utf8")).toMatch(/^status: approved$/m);
+  });
+
+  it("a plan already approved answers again and changes nothing; a retry fills in what a failed write missed [status-state#R7.S1]", () => {
+    spec("version-check", "approved");
+    plan("015-build", "version-check", design);
+    events([]);
+    decide({ kind: "approve-plan", work: "015-build" });
+    const planFile = join(root, "work", "015-build", "plan.md");
+    const before = readFileSync(planFile, "utf8");
+    const n = log().length;
+    decide({ kind: "approve-plan", work: "015-build" });
+    expect(readFileSync(planFile, "utf8")).toBe(before);
+    expect(log().filter((e) => e.type === "plan.design_approved")).toHaveLength(1);
+    expect(log().length).toBeGreaterThanOrEqual(n);
+    writeFileSync(planFile, before.replace(/^(design_)?approved_(by|at):.*\n/gm, ""));   // the file writes failed after the move
+    decide({ kind: "approve-plan", work: "015-build" });
+    expect(readFileSync(planFile, "utf8")).toMatch(/^approved_by: John Doe \(via companion\)$/m);
+    expect(readFileSync(planFile, "utf8")).toMatch(/^status: approved$/m);
+  });
+
+  it("a change request on an approved spec moves it back to writing [status-state#R7.S1]", () => {
+    spec("version-check", "approved");
+    plan("017-x", "version-check", "## Patterns\n\n### Reused\n- **P1 X:** `a.ts:1`. Fits.\n\n### New\nNone.\n");   // a plan waiting is a card on the spec
+    events([]);
+    state("version-check", "approve"); state("version-check", "plan", "work=017-x");
+    decide({ kind: "feedback", spec: "version-check", note: "rethink R2" });
+    expect(state("version-check", "show")).toMatch(/"spec": "writing"/);
   });
 
   it("approves a plan and its new pattern [companion-decisions#R5.S1]", () => {
     plan("015-build", "link-report", "## Patterns\n\n### Reused\n- **P1 X:** `a.ts:1`. Fits.\n\n### New\n- **N1 Tasks in isolated git worktrees:** Needed because parallel. Alternatives: none. Approved: <pending>\n");
+    events([]);
+    state("link-report", "approve"); state("link-report", "plan", "work=015-build");
     events([]);
     decide({ kind: "approve-plan", work: "015-build" });
     const p = readFileSync(join(root, "work", "015-build", "plan.md"), "utf8");
@@ -106,8 +221,8 @@ describe("deciding in the companion", () => {
     expect(p).toMatch(/^design_approved_by: John Doe \(via companion\)$/m);
     expect(p).toMatch(/^approved_by: John Doe \(via companion\)$/m);
     expect(readFileSync(join(root, "work", "015-build", "general", "design.md"), "utf8")).toContain("Approved: John Doe (via companion), 2026-11-17");
-    expect(log().map((e) => e.type)).toEqual(["plan.design_approved", "plan.approved"]);
-    expect(log()[0].data.new_patterns).toEqual(["N1"]);
+    expect(log().map((e) => e.type)).toEqual(["plan.approved", "plan.design_approved"]);
+    expect(log()[1].data.new_patterns).toEqual(["N1"]);
   });
 
   it("requests changes with a note [companion-decisions#R6.S1]", () => {
@@ -128,7 +243,7 @@ describe("deciding in the companion", () => {
     events([]);
     const before = readFileSync(join(root, "specs", "link-report.md"), "utf8");
     expect(() => decide({ kind: "edit-requirement", spec: "link-report", text: "R1 …" })).toThrow("Unknown decision");
-    expect(() => decide({ kind: "approve-spec", spec: "link-report" })).toThrow("isn't waiting");
+    expect(() => decide({ kind: "approve-spec", spec: "no-such-spec" })).toThrow("isn't waiting");
     expect(readFileSync(join(root, "specs", "link-report.md"), "utf8")).toBe(before);
     expect(readFileSync(join(root, "events.jsonl"), "utf8").trim()).toBe("");
   });

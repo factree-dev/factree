@@ -147,7 +147,22 @@ export type DecisionRequest =
   | { kind: "approve-lesson" | "reject-lesson"; spec: string; key: string };
 
 const here = dirname(fileURLToPath(import.meta.url));
-const EVENT_SH = [join(here, "..", "scripts", "event.sh"), join(here, "..", "..", "..", "plugins", "factree", "scripts", "event.sh")].find((p) => existsSync(p)) ?? "";
+const script = (name: string) => [join(here, "..", "scripts", name), join(here, "..", "..", "..", "plugins", "factree", "scripts", name)].find((p) => existsSync(p)) ?? "";
+const EVENT_SH = script("event.sh");
+const STATE_SH = script("state.sh");
+
+/** Make a move through state.sh, the one writer of status (status-state R7): refused is 409, a held lock 503. */
+function stateMove(root: string, spec: string, move: string, fields: string[] = []) {
+  const env: NodeJS.ProcessEnv = { ...process.env, FACTREE_HOME: root };
+  delete env.CLAUDE_CODE_SESSION_ID;
+  try {
+    execFileSync("bash", [STATE_SH, spec, move, ...fields], { env, cwd: dirname(root), stdio: "pipe" });
+  } catch (e) {
+    const err = e as { status?: number; stderr?: Buffer; stdout?: Buffer };
+    const msg = (String(err.stderr ?? "").trim() || String(err.stdout ?? "").trim() || `${move} failed`).split("\n")[0]!;
+    throw new DecisionError(err.status === 4 ? 503 : err.status === 3 ? 409 : 500, msg);
+  }
+}
 
 /** Log through event.sh, so there's one event format, as the companion rather than any Claude session. */
 function logEvent(root: string, type: string, subject: string, data: Record<string, unknown>) {
@@ -168,6 +183,22 @@ function setFrontMatter(path: string, fields: Record<string, string>) {
   }
   lines.splice(end, 0, ...[...left].map((k) => `${k}: ${fields[k]}`));
   writeFileSync(path, lines.join("\n"));
+}
+
+/** The front matter value of a key, or "" when it is missing or empty. */
+function frontValue(path: string, key: string): string {
+  const lines = readFileSync(path, "utf8").split("\n");
+  if (lines[0] !== "---") return "";
+  const end = lines.indexOf("---", 1);
+  for (let i = 1; i < end; i++) { const m = new RegExp(`^${key}:[ ]*(.*)$`).exec(lines[i]!); if (m) return m[1]!.trim(); }
+  return "";
+}
+
+/** Set only the fields still missing, so a retry after a failed write completes the rest and changes nothing else. */
+function setMissing(path: string, fields: Record<string, string>): boolean {
+  const need = Object.fromEntries(Object.entries(fields).filter(([k]) => !frontValue(path, k)));
+  if (Object.keys(need).length) setFrontMatter(path, need);
+  return Object.keys(need).length > 0;
 }
 
 export class DecisionError extends Error { constructor(public status: number, message: string) { super(message); } }
@@ -198,34 +229,45 @@ export function applyDecision(root: string, user: string, body: unknown, cards: 
     case "approve-spec": {
       const spec = slug("spec");
       const card = cards.find((c) => c.kind === "spec" && c.spec === spec);
-      if (!card) throw new DecisionError(409, `${spec} isn't waiting for approval`);
-      if (!card.approvable) throw new DecisionError(409, card.blockedReason ?? "Not approvable here");
-      setFrontMatter(join(root, "specs", `${spec}.md`), { status: "approved", approved_by: `${by} (via companion)`, approved_at: today });
-      logEvent(root, "spec.approved", spec, via);
+      const file = join(root, "specs", `${spec}.md`);
+      // Approved already: answering again is fine, and fills in approval fields a failed write left out.
+      const done = !card && existsSync(file) && frontValue(file, "status") === "approved";
+      if (!card && !done) throw new DecisionError(409, `${spec} isn't waiting for approval`);
+      if (card && !card.approvable) throw new DecisionError(409, card.blockedReason ?? "Not approvable here");
+      // Sets status, approved_by and approved_at (a fresh approval replaces an older one's names, an already approved one
+      // only fills what is missing) and logs spec.approved.
+      stateMove(root, spec, "approve", [`by=${by}`, "via=companion", `at=${today}`]);
       return;
     }
     case "approve-plan": {
       const work = slug("work");
       const card = cards.find((c) => c.kind === "plan" && c.work === work);
-      if (!card) throw new DecisionError(409, `${work} isn't waiting for approval`);
-      if (!card.approvable) throw new DecisionError(409, card.blockedReason ?? "Not approvable here");
       const dir = join(root, "work", work);
-      if (!existsSync(join(dir, "plan.md"))) throw new DecisionError(409, "Only plans split by vertical can be approved here");
+      const head = join(dir, "plan.md");
+      // A plan approved already has no card; answering it again is fine and fills in what a failed write left out.
+      const done = !card && existsSync(head) && frontValue(head, "status") === "approved";
+      if (!card && !done) throw new DecisionError(409, `${work} isn't waiting for approval`);
+      if (card && !card.approvable) throw new DecisionError(409, card.blockedReason ?? "Not approvable here");
+      if (!existsSync(head)) throw new DecisionError(409, "Only plans split by vertical can be approved here");
       const name = `${by} (via companion)`;
+      const tasks = Number(card?.why.match(/^(\d+) tasks/)?.[1] ?? 0);
+      stateMove(root, card?.spec ?? frontValue(head, "spec"), "plan-approve", [`work=${work}`, `by=${by}`, "via=companion", `at=${today}`, `tasks=${tasks}`]);   // sets status, logs plan.approved
       for (const v of readdirSync(dir)) {
         const d = join(dir, v, "design.md");
         if (existsSync(d)) writeFileSync(d, readFileSync(d, "utf8").replace(/Approved: <pending>/g, `Approved: ${name}, ${today}`));
       }
-      setFrontMatter(join(dir, "plan.md"), { status: "approved", design_approved_by: name, design_approved_at: today, approved_by: name, approved_at: today });
-      const tasks = Number(card.why.match(/^(\d+) tasks/)?.[1] ?? 0);
-      logEvent(root, "plan.design_approved", work, { ...via, new_patterns: (card.newPatterns ?? []).map((p) => p.id) });
-      logEvent(root, "plan.approved", work, { ...via, tasks });
+      const fields = { design_approved_by: name, design_approved_at: today };   // approved_by/at: state.sh, above
+      if (card) setFrontMatter(head, fields);
+      if (card || setMissing(head, fields)) logEvent(root, "plan.design_approved", work, { ...via, new_patterns: (card?.newPatterns ?? []).map((p) => p.id) });
       return;
     }
     case "feedback": {
       const spec = slug("spec"), note = str("note", 300);
       const work = b.work === undefined ? undefined : slug("work");
       if (!cards.some((c) => c.spec === spec && (work === undefined || c.work === work))) throw new DecisionError(409, "Nothing on that is waiting");
+      // A change request on an approved spec sends it back to writing (status-state R7).
+      const sf = join(root, "specs", `${spec}.md`);
+      if (work === undefined && existsSync(sf) && /^status:\s*approved\b/m.test(readFileSync(sf, "utf8").split(/\n---\n/)[0]!)) stateMove(root, spec, "edit");
       logEvent(root, "decision.feedback", spec, { note, ...(work ? { work } : {}), ...via });
       return;
     }

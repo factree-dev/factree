@@ -186,11 +186,17 @@ check "unsafe session ids are ignored" '[ $(ls "$tmp/ws/.factree/sessions" | wc 
 (cd "$tmp/ws/repo" && bash $EVENT question.asked demo '{"n":1,"text":"Hidden or disabled?"}')
 check "event.sh accepts question.asked and records cwd" 'grep -q "\"type\":\"question.asked\".*\"cwd\":\"$tmp/ws/repo\"" "$tmp/ws/.factree/events.jsonl"'
 check "event.sh rejects unknown types" '! bash $EVENT spec.bogus demo 2>/dev/null'
-(cd "$tmp/ws/repo" && CLAUDE_CODE_SESSION_ID=611a0794-d356-4c30-a967-cc8cb6f9f85a bash $EVENT spec.approved demo '{"by":"A"}')
+for t in spec.created spec.approved spec.edited plan.created plan.approved task.started task.done plan.implemented review.opened review.merged review.closed stage.held stage.released; do
+  msg=$(cd "$tmp/ws/repo" && env -u FACTREE_STATE_WRITER bash $EVENT $t demo '{"by":"A"}' 2>&1); echo "$t $? $msg"
+done > "$tmp/moves.out"
+check "event.sh refuses every move type without the writer, exit 3 [status-state#R7.S1]" '[ $(grep -c "^[a-z.]* 3 [a-z.]* is a status move: use state.sh$" "$tmp/moves.out") -eq 13 ] && ! grep -q "\"type\":\"spec.created\"" "$tmp/ws/.factree/events.jsonl"'
+check "event.sh spec.approved without the writer is refused, exit 3 [status-state#R7.S1]" '(cd "$tmp/ws/repo" && env -u FACTREE_STATE_WRITER bash $EVENT spec.approved demo "{}" >/dev/null 2>&1; [ $? -eq 3 ])'
+check "event.sh accepts a non-move type without the writer [status-state#R7.S1]" '(cd "$tmp/ws/repo" && env -u FACTREE_STATE_WRITER bash $EVENT spec.step demo "{}" 2>/dev/null) && tail -n1 "$tmp/ws/.factree/events.jsonl" | grep -q "\"type\":\"spec.step\""'
+(cd "$tmp/ws/repo" && CLAUDE_CODE_SESSION_ID=611a0794-d356-4c30-a967-cc8cb6f9f85a FACTREE_STATE_WRITER=1 bash $EVENT spec.approved demo '{"by":"A"}')
 check "event.sh records the session [spec-sessions#R1.S1]" 'tail -n1 "$tmp/ws/.factree/events.jsonl" | grep -q "\"session\":\"611a0794-d356-4c30-a967-cc8cb6f9f85a\""'
-(cd "$tmp/ws/repo" && env -u CLAUDE_CODE_SESSION_ID bash $EVENT spec.approved demo '{"by":"A"}')
+(cd "$tmp/ws/repo" && env -u CLAUDE_CODE_SESSION_ID FACTREE_STATE_WRITER=1 bash $EVENT spec.approved demo '{"by":"A"}')
 check "no session outside Claude Code [spec-sessions#R1.S2]" '! tail -n1 "$tmp/ws/.factree/events.jsonl" | grep -q "\"session\""'
-(cd "$tmp/ws/repo" && CLAUDE_CODE_SESSION_ID='a"b' bash $EVENT spec.approved demo '{"by":"A"}')
+(cd "$tmp/ws/repo" && CLAUDE_CODE_SESSION_ID='a"b' FACTREE_STATE_WRITER=1 bash $EVENT spec.approved demo '{"by":"A"}')
 check "unsafe session ids are left out [spec-sessions#R1.S3]" 'tail -n1 "$tmp/ws/.factree/events.jsonl" | grep -v -q "\"session\"" && tail -n1 "$tmp/ws/.factree/events.jsonl" | grep -q "\"data\":{\"by\":\"A\"}}$"'
 rm -rf "$tmp"
 
@@ -198,7 +204,7 @@ echo "# companion decisions reach Claude"
 WAIT="$(pwd)/$P/scripts/wait-decision.sh"
 SINCE="$(pwd)/$P/scripts/decisions-since.sh"
 tmp=$(mktemp -d); mkdir -p "$tmp/ws/.factree" "$tmp/ws/repo"; touch "$tmp/ws/.factree/events.jsonl"
-decided() { (cd "$tmp/ws/repo" && env -u CLAUDE_CODE_SESSION_ID bash $EVENT "$@"); }
+decided() { (cd "$tmp/ws/repo" && env -u CLAUDE_CODE_SESSION_ID FACTREE_STATE_WRITER=1 bash $EVENT "$@"); }   # fabricates companion history on purpose, so it holds the writer env
 waiting() { (cd "$tmp/ws/repo" && FACTREE_WAIT_EVERY=0.2 FACTREE_WAIT_FOR=${2:-20} bash "$WAIT" $1 > "$tmp/out" 2>&1) & wpid=$!; sleep 0.5; }
 decided question.asked demo '{"n":3,"text":"Where?"}'
 waiting demo
@@ -236,7 +242,7 @@ rm -rf "$tmp"
 
 echo "# each decision reaches Claude once"
 tmp=$(mktemp -d); mkdir -p "$tmp/ws/.factree" "$tmp/ws/repo"; touch "$tmp/ws/.factree/events.jsonl"
-decided() { (cd "$tmp/ws/repo" && env -u CLAUDE_CODE_SESSION_ID bash $EVENT "$@"); }
+decided() { (cd "$tmp/ws/repo" && env -u CLAUDE_CODE_SESSION_ID FACTREE_STATE_WRITER=1 bash $EVENT "$@"); }   # fabricates companion history on purpose, so it holds the writer env
 answer() { decided question.answered demo "{\"n\":$1,\"answer\":\"A$1\",\"by\":\"John Doe\",\"via\":\"companion\"}"; }
 wait_in() { (cd "$tmp/ws/repo" && CLAUDE_CODE_SESSION_ID=$1 FACTREE_WAIT_EVERY=0.2 FACTREE_WAIT_FOR=${2:-4} bash "$WAIT" demo > "$tmp/out" 2>&1) & wpid=$!; }
 done_in() { for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25; do kill -0 $wpid 2>/dev/null || return 0; sleep 0.2; done; return 1; }
@@ -258,8 +264,8 @@ for t in task.reviewed bug.escaped lesson.proposed lesson.approved lesson.reject
 check "event.sh accepts the learning events [self-improving#R2.S1]" '[ $(grep -c "\"type\":\"\(task.reviewed\|bug.escaped\|lesson.proposed\|lesson.approved\|lesson.rejected\)\"" "$tmp/.factree/events.jsonl" 2>/dev/null) -eq 5 ]'
 rm -rf "$tmp"
 tmp=$(mktemp -d); mkdir -p "$tmp/.factree"
-FACTREE_HOME="$tmp/.factree" bash $EVENT stage.held 063-x '{"stage":"review","reason":"acceptance run"}' 2>/dev/null
-FACTREE_HOME="$tmp/.factree" bash $EVENT stage.released 063-x '{"stage":"review"}' 2>/dev/null
+FACTREE_HOME="$tmp/.factree" FACTREE_STATE_WRITER=1 bash $EVENT stage.held 063-x '{"stage":"review","reason":"acceptance run"}' 2>/dev/null
+FACTREE_HOME="$tmp/.factree" FACTREE_STATE_WRITER=1 bash $EVENT stage.released 063-x '{"stage":"review"}' 2>/dev/null
 check "event.sh accepts stage.held and stage.released on the work [build-status#R4.S3]" 'grep -q "\"type\":\"stage.held\",\"work\":\"063-x\"" "$tmp/.factree/events.jsonl" && grep -q "\"type\":\"stage.released\",\"work\":\"063-x\"" "$tmp/.factree/events.jsonl"'
 rm -rf "$tmp"
 
@@ -312,7 +318,7 @@ GH
 chmod +x "$tmp/bin/gh"
 # gh answers "<state> <mergeable> <reviewDecision>", as wait-review.sh asks it to.
 printf 'OPEN MERGEABLE REVIEW_REQUIRED\n' > "$tmp/bin/state"; : > "$tmp/bin/comments"
-(cd "$tmp/ws/repo" && bash $EVENT review.opened 012-review '{"pr":"7","url":"https://github.com/o/r/pull/7","base":"main"}')
+(cd "$tmp/ws/repo" && FACTREE_STATE_WRITER=1 bash $EVENT review.opened 012-review '{"pr":"7","url":"https://github.com/o/r/pull/7","base":"main"}')
 wr() { (cd "$tmp/ws/repo" && PATH="$tmp/bin:$PATH" FACTREE_WAIT_EVERY=0.2 FACTREE_WAIT_FOR=${1:-3} bash "$WR" 012-review > "$tmp/out" 2>&1) ; }
 # gh answers one comment per line, fields joined by the unit separator (\037), as wait-review.sh asks it to.
 printf '101\037priya\037src/App.tsx\03742\037this loop is off by one\n' > "$tmp/bin/comments"; wr
@@ -350,7 +356,7 @@ else r=${2#repos/acme/}; r=${r%%/*}; case "$2" in */pulls/*) cat "$d/comments-$r
 GH
 chmod +x "$tmp/bin/gh"
 for r in backend frontend; do printf 'OPEN MERGEABLE REVIEW_REQUIRED\n' > "$tmp/bin/state-$r"; : > "$tmp/bin/comments-$r"
-  (cd "$tmp/ws/$r" && bash $EVENT review.opened 062-x "{\"pr\":\"7\",\"url\":\"u\",\"repo\":\"$r\",\"tasks\":\"T1\",\"base\":\"main\"}"); done
+  (cd "$tmp/ws/$r" && FACTREE_STATE_WRITER=1 bash $EVENT review.opened 062-x "{\"pr\":\"7\",\"url\":\"u\",\"repo\":\"$r\",\"tasks\":\"T1\",\"base\":\"main\"}"); done
 wm() { (cd "$tmp/ws/frontend" && PATH="$tmp/bin:$PATH" FACTREE_WAIT_EVERY=0.2 FACTREE_WAIT_FOR=1 bash "$WR" 062-x "$@" > "$tmp/out" 2>&1); }
 printf '201\037priya\037a.ts\0373\037fix this\n' > "$tmp/bin/comments-frontend"; wm frontend
 check "a comment on frontend #7 is logged for frontend, not backend #7 [multi-repo#R8.S3]" 'grep -q "\"type\":\"review.comment\".*\"id\":\"201\".*\"repo\":\"frontend\"" "$tmp/ws/.factree/events.jsonl" && ! grep "review.comment" "$tmp/ws/.factree/events.jsonl" | grep -q "\"repo\":\"backend\"" && grep -q "^review: comment by priya" "$tmp/out"'
@@ -358,7 +364,7 @@ printf 'MERGED UNKNOWN \n' > "$tmp/bin/state-backend"; wm backend 7
 check "each repo's state is its own, logged with its repo" 'grep -q "\"type\":\"review.state\".*\"pr\":\"7\",\"state\":\"MERGED\",\"repo\":\"backend\"" "$tmp/ws/.factree/events.jsonl" && ! grep "review.state" "$tmp/ws/.factree/events.jsonl" | grep -q "\"repo\":\"frontend\""'
 wm
 check "two repos and no repo named: it says which to name" 'grep -q "^review: 062-x has pull requests in several repos (backend,frontend): name one" "$tmp/out" && [ $(wc -l < "$tmp/out") -eq 1 ]'
-for p in 12 13; do (cd "$tmp/ws/backend" && bash $EVENT review.opened 062-x "{\"pr\":\"$p\",\"url\":\"u\",\"repo\":\"backend\",\"tasks\":\"T$p\",\"base\":\"main\"}"); done
+for p in 12 13; do (cd "$tmp/ws/backend" && FACTREE_STATE_WRITER=1 bash $EVENT review.opened 062-x "{\"pr\":\"$p\",\"url\":\"u\",\"repo\":\"backend\",\"tasks\":\"T$p\",\"base\":\"main\"}"); done
 printf 'OPEN MERGEABLE APPROVED\n' > "$tmp/bin/state-backend"; wm backend 12; wm backend 13
 check "two PRs in one repo reaching the same state are each logged [multi-repo#R8]" 'grep -q "\"type\":\"review.state\".*\"pr\":\"12\",\"state\":\"APPROVED\",\"repo\":\"backend\"" "$tmp/ws/.factree/events.jsonl" && grep -q "\"type\":\"review.state\".*\"pr\":\"13\",\"state\":\"APPROVED\",\"repo\":\"backend\"" "$tmp/ws/.factree/events.jsonl" && grep -q "^review: APPROVED$" "$tmp/out"'
 git -C "$tmp/ws/frontend" remote set-url origin https://gitlab.com/acme/frontend.git; wm frontend
@@ -371,7 +377,7 @@ git -C "$tmp/r" remote add origin https://github.com/acme/r.git
 printf '#!/usr/bin/env bash\n[ "$1" = pr ] && cat "$(dirname "$0")/state"; exit 0\n' > "$tmp/bin/gh"; chmod +x "$tmp/bin/gh"
 printf 'OPEN MERGEABLE APPROVED\n' > "$tmp/bin/state"
 (cd "$tmp/r" && bash $EVENT review.state 062-s '{"pr":"9","state":"APPROVED","repo":"x"}')
-for p in 12 13; do (cd "$tmp/r" && bash $EVENT review.opened 062-s "{\"pr\":\"$p\",\"url\":\"u\",\"repo\":\".\",\"base\":\"main\"}"); done
+for p in 12 13; do (cd "$tmp/r" && FACTREE_STATE_WRITER=1 bash $EVENT review.opened 062-s "{\"pr\":\"$p\",\"url\":\"u\",\"repo\":\".\",\"base\":\"main\"}"); done
 for p in 12 13; do (cd "$tmp/r" && PATH="$tmp/bin:$PATH" bash "$WR" 062-s . "$p" --once >/dev/null 2>&1); done
 check "repo . : each PR's state is logged, and . is not a wildcard [multi-repo#R8]" '[ $(grep -c "\"type\":\"review.state\".*\"state\":\"APPROVED\",\"repo\":\"\.\"" "$tmp/r/.factree/events.jsonl") -eq 2 ]'
 rm -rf "$tmp"
@@ -388,11 +394,11 @@ cat > "$tmp/bin/gh" <<'GH'
 echo "$*" >> "$(dirname "$0")/calls"; [ "$1" = pr ] && echo "OPEN MERGEABLE REVIEW_REQUIRED"; exit 0
 GH
 chmod +x "$tmp/bin/gh"
-for r in backend frontend; do (cd "$tmp/ws/$r" && bash $EVENT review.opened 062-x "{\"pr\":\"7\",\"url\":\"u\",\"repo\":\"$r\",\"base\":\"main\"}"); done
+for r in backend frontend; do (cd "$tmp/ws/$r" && FACTREE_STATE_WRITER=1 bash $EVENT review.opened 062-x "{\"pr\":\"7\",\"url\":\"u\",\"repo\":\"$r\",\"base\":\"main\"}"); done
 (cd "$tmp/ws/backend" && bash $EVENT review.state 062-x '{"pr":"7","state":"MERGED","repo":"backend"}')
 (cd "$tmp/ws/frontend" && PATH="$tmp/bin:/usr/bin:/bin" bash "$CU" >/dev/null 2>&1)
 check "catch-up skips the merged #7 in backend and still checks frontend's #7 [multi-repo#R8.S3]" '! grep -q "acme/backend" "$tmp/bin/calls" && grep -q "^pr view 7 -R acme/frontend" "$tmp/bin/calls"'
-(cd "$tmp/ws/infra" && bash $EVENT review.opened 062-y '{"pr":"3","url":"u","repo":"infra","base":"main"}')
+(cd "$tmp/ws/infra" && FACTREE_STATE_WRITER=1 bash $EVENT review.opened 062-y '{"pr":"3","url":"u","repo":"infra","base":"main"}')
 : > "$tmp/bin/calls"; (cd "$tmp/ws/infra" && PATH="$tmp/bin:/usr/bin:/bin" bash "$WR" 062-y infra --once >/dev/null 2>&1)
 check "an ssh:// origin parses to acme/infra" 'grep -q "^pr view 3 -R acme/infra" "$tmp/bin/calls"'
 rm -rf "$tmp"
@@ -407,7 +413,7 @@ case "$1 $2" in "pr view") cat "$d/state" ;; "api "*) : ;; esac
 GH
 chmod +x "$tmp/bin/gh"
 printf 'MERGED UNKNOWN \n' > "$tmp/bin/state"
-(cd "$tmp/ws/repo" && bash $EVENT review.opened 040-export '{"pr":"12","url":"u","base":"main"}')
+(cd "$tmp/ws/repo" && FACTREE_STATE_WRITER=1 bash $EVENT review.opened 040-export '{"pr":"12","url":"u","base":"main"}')
 cu() { (cd "$tmp/ws/repo" && PATH="$1:/usr/bin:/bin" bash "$CU" > "$tmp/out" 2>&1); }
 cu "$tmp/bin"
 check "merged with no wait [review#R11.S1]" 'grep -q "\"type\":\"review.state\",\"work\":\"040-export\".*\"state\":\"MERGED\"" "$tmp/ws/.factree/events.jsonl" && [ ! -s "$tmp/out" ]'
@@ -415,10 +421,10 @@ check "merged with no wait [review#R11.S1]" 'grep -q "\"type\":\"review.state\",
 check "not too often [review#R11.S2]" '[ ! -s "$tmp/bin/calls" ]'
 rm -f "$tmp/ws/.factree/review-catchup.at"; : > "$tmp/bin/calls"; cu "$tmp/bin"
 check "finished ones skipped [review#R11.S3]" '! grep -q "pr view 12" "$tmp/bin/calls"'
-rm -f "$tmp/ws/.factree/review-catchup.at"; (cd "$tmp/ws/repo" && bash $EVENT review.opened 041-other '{"pr":"13","url":"u","base":"main"}')
+rm -f "$tmp/ws/.factree/review-catchup.at"; (cd "$tmp/ws/repo" && FACTREE_STATE_WRITER=1 bash $EVENT review.opened 041-other '{"pr":"13","url":"u","base":"main"}')
 before=$(wc -l < "$tmp/ws/.factree/events.jsonl"); cu "$tmp/nogh"
 check "no GitHub CLI [review#R11.S4]" '[ ! -s "$tmp/out" ] && [ "$(wc -l < "$tmp/ws/.factree/events.jsonl")" = "$before" ]'
-rm -f "$tmp/ws/.factree/review-catchup.at"; (cd "$tmp/ws/repo" && bash $EVENT review.opened 042-hook '{"pr":"14","url":"u","base":"main"}')
+rm -f "$tmp/ws/.factree/review-catchup.at"; (cd "$tmp/ws/repo" && FACTREE_STATE_WRITER=1 bash $EVENT review.opened 042-hook '{"pr":"14","url":"u","base":"main"}')
 out=$(printf '{"session_id":"hook1","hook_event_name":"SessionStart","cwd":"%s"}' "$tmp/ws/repo" | PATH="$tmp/bin:/usr/bin:/bin" bash $P/scripts/session-hook.sh)
 for n in 1 2 3 4 5 6 7 8 9 10; do grep -q "\"work\":\"042-hook\".*\"state\":\"MERGED\"" "$tmp/ws/.factree/events.jsonl" && break; sleep 0.3; done
 check "the hook starts the catch-up [review#R11.S1]" 'grep -q "\"work\":\"042-hook\".*\"state\":\"MERGED\"" "$tmp/ws/.factree/events.jsonl" && [ -z "$out" ]'
@@ -472,10 +478,10 @@ rm -rf "$tmp"
 echo "# version check"
 V=$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' $P/.claude-plugin/plugin.json | head -n1)
 tmp=$(mktemp -d); mkdir -p "$tmp/ws/.factree" "$tmp/ws/repo"
-(cd "$tmp/ws/repo" && bash $EVENT spec.approved demo '{"by":"A"}')
+(cd "$tmp/ws/repo" && FACTREE_STATE_WRITER=1 bash $EVENT spec.approved demo '{"by":"A"}')
 check "events record the version [version-check#R1.S1]" 'tail -n1 "$tmp/ws/.factree/events.jsonl" | grep -q "\"v\":\"$V\""'
 mkdir -p "$tmp/bare/scripts"; cp $P/scripts/*.sh "$tmp/bare/scripts/"
-(cd "$tmp/ws/repo" && bash "$tmp/bare/scripts/event.sh" spec.approved demo '{"by":"A"}')
+(cd "$tmp/ws/repo" && FACTREE_STATE_WRITER=1 bash "$tmp/bare/scripts/event.sh" spec.approved demo '{"by":"A"}')
 check "no manifest, no version [version-check#R1.S2]" '! tail -n1 "$tmp/ws/.factree/events.jsonl" | grep -q "\"v\":"'
 start() { echo "{\"session_id\":\"s9\",\"hook_event_name\":\"$2\",\"cwd\":\"$tmp/ws/repo\"}" | bash "$1"; }
 echo '{"ts":"2026-11-17T10:00:00Z","type":"spec.step","spec":"demo","v":"9.9.0","data":{}}' >> "$tmp/ws/.factree/events.jsonl"
@@ -494,7 +500,11 @@ rm -rf "$tmp"
 
 echo "# build progress"
 TD="$(pwd)/$P/scripts/task-done.sh"
-tmp=$(mktemp -d); mkdir -p "$tmp/.factree/work"; cp -R tests/validate-plan/verticals/plan "$tmp/.factree/work/007-widget-export"
+ST="$(pwd)/$P/scripts/state.sh"
+# The plan's spec, with its state approved and planned, as the flow leaves it before a build [status-state#R7].
+wstate() { mkdir -p "$1/specs"; printf -- '---\nstatus: approved\n---\n# widget-export\n' > "$1/specs/widget-export.md"
+  FACTREE_HOME="$1" bash "$ST" widget-export plan work=007-widget-export >/dev/null && FACTREE_HOME="$1" bash "$ST" widget-export plan-approve work=007-widget-export >/dev/null; }
+tmp=$(mktemp -d); mkdir -p "$tmp/.factree/work"; cp -R tests/validate-plan/verticals/plan "$tmp/.factree/work/007-widget-export"; wstate "$tmp/.factree"
 rv() { FACTREE_HOME="$1/.factree" bash $EVENT task.reviewed 007-widget-export "{\"task\":\"$2\",\"spec\":\"$3\",\"quality\":\"${4:-pass}\"}"; }
 rvs() { FACTREE_HOME="$1/.factree" bash $EVENT agent.started 007-widget-export "{\"role\":\"review\",\"task\":\"$2\",\"model\":\"sonnet\"}"; }   # the reviewer the hook would have logged
 for t in T1 T2 T3; do rvs "$tmp" $t; rv "$tmp" $t pass; done
@@ -507,10 +517,17 @@ out=$(FACTREE_HOME="$tmp/.factree" bash "$TD" 007-widget-export T2 0a0b0c0 60 "n
 check "the last task marks the plan implemented [build#R6.S1]" 'grep -q "^implemented_at: 20" "$tmp/.factree/work/007-widget-export/plan.md" && grep -q "\"type\":\"plan.implemented\",\"work\":\"007-widget-export\"" "$tmp/.factree/events.jsonl" && echo "$out" | grep -q "007-widget-export implemented"'
 check "unknown task is refused" '! FACTREE_HOME="$tmp/.factree" bash "$TD" 007-widget-export T9 x 1 y 2>/dev/null'
 rm -rf "$tmp"
-rtmp() { tmp=$(mktemp -d); mkdir -p "$tmp/.factree/work"; cp -R tests/validate-plan/verticals/plan "$tmp/.factree/work/007-widget-export"; }
+rtmp() { tmp=$(mktemp -d); mkdir -p "$tmp/.factree/work"; cp -R tests/validate-plan/verticals/plan "$tmp/.factree/work/007-widget-export"; wstate "$tmp/.factree"; }
 tdr() { FACTREE_HOME="$tmp/.factree" bash "$TD" 007-widget-export T2 abc1234 60 "npm test" 2>&1; echo "rc=$?"; }
 t2open() { awk "/^### T2:/{f=1;next} /^### /{f=0} f" "$tmp/.factree/work/007-widget-export/"*/tasks.md | grep -q "^- \[ \]"; }
+rtmp; rvs "$tmp" T2; rv "$tmp" T2 pass; out=$(FACTREE_HOME="$tmp/.factree" bash "$TD" 007-widget-export T2 0123456 60 "npm test" 2>&1)
+check "a numeric commit stays a quoted string in a valid event line [status-state#R7.S2]" 'grep "\"type\":\"task.done\"" "$tmp/.factree/events.jsonl" | grep -q "\"commit\":\"0123456\",\"lines\":60,"'
+rm -rf "$tmp"
+rtmp; rvs "$tmp" T2; rv "$tmp" T2 pass; rm -rf "$tmp/.factree/state"; grep -v "\"type\":\"plan\." "$tmp/.factree/events.jsonl" > "$tmp/e"; mv "$tmp/e" "$tmp/.factree/events.jsonl"; sed "s/^status: approved/status: draft/" "$tmp/.factree/work/007-widget-export/plan.md" > "$tmp/p" && mv "$tmp/p" "$tmp/.factree/work/007-widget-export/plan.md"; FACTREE_HOME="$tmp/.factree" bash "$ST" widget-export write >/dev/null; out=$(tdr)   # a plan neither approved on disk nor in the log seeds as not approved
+check "a refused move passes state.sh's exit code and leaves the steps unticked [status-state#R7.S2]" 'echo "$out" | grep -q "rc=3" && ! echo "$out" | grep -q "^T2 done" && t2open'
+rm -rf "$tmp"
 rtmp; rvs "$tmp" T2; rv "$tmp" T2 pass; out=$(tdr)
+check "task-done.sh moves the state's count by one [status-state#R7.S2]" 'grep -q "\"tasks.007-widget-export\": \"T2\"" "$tmp/.factree/state/widget-export.json" && grep -q "\"plan.007-widget-export\": \"building\"" "$tmp/.factree/state/widget-export.json" && grep -q "\"type\":\"task.done\".*\"move\":\"task-done\"" "$tmp/.factree/events.jsonl"'
 check "reviewed and passing is marked [parallel-build#R5.S1]" 'echo "$out" | grep -q "^T2 done$" && echo "$out" | grep -q "rc=0" && ! t2open'
 rtmp; out=$(tdr)
 check "never reviewed exits 3, ticks and logs nothing [parallel-build#R5.S2]" 'echo "$out" | grep -q "^T2 has no passing review$" && echo "$out" | grep -q "rc=3" && t2open && ! grep -q task.done "$tmp/.factree/events.jsonl" 2>/dev/null'
@@ -527,7 +544,7 @@ check "a review event without a reviewer subagent exits 3 [parallel-build#R5.S6]
 rm -rf "$tmp"
 # task.done records the task's repo [multi-repo#R3.S4]
 tmp=$(mktemp -d); tmp=$(cd "$tmp" && pwd -P); bash tests/fixtures/multi/make.sh "$tmp/ws"; mkdir -p "$tmp/ws/.factree/work"
-cp -R tests/validate-plan/verticals/plan "$tmp/ws/.factree/work/007-widget-export"; printf 'frontend\nbackend\ninfra\n' > "$tmp/ws/.factree/repos.md"
+cp -R tests/validate-plan/verticals/plan "$tmp/ws/.factree/work/007-widget-export"; printf 'frontend\nbackend\ninfra\n' > "$tmp/ws/.factree/repos.md"; wstate "$tmp/ws/.factree"
 M="$tmp/ws/.factree/work/007-widget-export"
 sed -i.bak 's#`src/x.ts`#`backend/src/x.ts`#' "$M/backend/tasks.md"; sed -i.bak 's#`src/x.ts`#`frontend/src/x.ts`#' "$M/frontend/tasks.md"; rm -f "$M"/*/*.bak
 FACTREE_HOME="$tmp/ws/.factree" bash $EVENT agent.started 007-widget-export '{"role":"review","task":"T2","model":"sonnet"}'
@@ -656,7 +673,7 @@ I="$tmp/plugin"
 init_out=$(cd "$tmp/repo" && env -u FACTREE_HOME bash "$I/scripts/init.sh" 2>&1); init_code=$?
 mkdir -p "$tmp/repo/.factree/specs" && cp tests/fixtures/workspace/specs/link-report.md "$tmp/repo/.factree/specs/"   # as the spec skill does (its step 2)
 val_out=$(bash "$I/skills/spec/scripts/validate.sh" "$tmp/repo/.factree/specs/link-report.md" 2>&1); val_code=$?
-(cd "$tmp/repo" && env -u FACTREE_HOME bash "$I/scripts/event.sh" spec.approved link-report '{"by":"John Doe"}' >/dev/null 2>&1); ev_code=$?
+(cd "$tmp/repo" && env -u FACTREE_HOME bash "$I/scripts/state.sh" link-report write >/dev/null 2>&1 && env -u FACTREE_HOME bash "$I/scripts/state.sh" link-report approve by="John Doe" >/dev/null 2>&1); ev_code=$?
 hook_out=$(printf '{"session_id":"fresh1","hook_event_name":"SessionStart","cwd":"%s"}' "$tmp/repo" | env -u FACTREE_HOME bash "$I/scripts/session-hook.sh" 2>&1); hook_code=$?
 check "skills' scripts work in a new repo [clean-install#R2.S1]" '[ $init_code -eq 0 ] && [ -d "$tmp/repo/.factree" ] && grep -qx ".factree/" "$tmp/repo/.git/info/exclude" && [ $val_code -eq 0 ] && [ $ev_code -eq 0 ] && grep -q "\"type\":\"spec.approved\"" "$tmp/repo/.factree/events.jsonl" && [ $hook_code -eq 0 ] && [ -f "$tmp/repo/.factree/sessions/fresh1.json" ]'
 port=$((4800 + RANDOM % 150))
@@ -795,6 +812,161 @@ out=$(bash "$PRP" "$W")
 check "a single-repo plan gets one PR per task and no integration branch [multi-repo#R5.S5]" '[ "$(echo "$out" | wc -l | tr -d " ")" = 3 ] && ! echo "$out" | cut -f3,4 | tr "\t" "\n" | grep -qx "factree/009-demo"'
 check "pr-plan.sh stays under 300 lines [multi-repo#R5]" '[ $(wc -l < $PRP) -lt 300 ]'
 rm -rf "$tmp"
+
+echo "# state"
+ST="$(pwd)/$P/scripts/state.sh"
+# A workspace with spec link-report (draft) and plan 002-link-report (draft, 5 tasks).
+sw() { tmp=$(mktemp -d); W="$tmp/.factree"; WK="$W/work/002-link-report"; SF="$W/state/link-report.json"; mkdir -p "$W/specs" "$WK/backend"; : > "$W/events.jsonl"
+  sed 's/^status: approved$/status: draft/' tests/fixtures/workspace/specs/link-report.md > "$W/specs/link-report.md"
+  sed 's/^status: approved$/status: draft/' tests/fixtures/workspace/work/002-link-report/plan.md > "$WK/plan.md"
+  for n in 1 2 3 4 5; do printf '### T%s: task %s\n' $n $n; done > "$WK/backend/tasks.md"; }
+st() { FACTREE_HOME="$W" bash "$ST" "$@" 2>&1; }
+snap() { cksum "$SF" "$W/events.jsonl" "$W/specs/link-report.md" "$WK/plan.md"; }
+jsonok() { awk '{ L[NR] = $0 } END { if (L[1] != "{" || L[NR] != "}") exit 1; for (i = 2; i < NR - 1; i++) if (L[i] !~ /^  "[^"]+": "[^"]*",$/) exit 1; if (L[NR-1] !~ /^  "[^"]+": "[^"]*"$/) exit 1 }' "$1"; }
+sw; st link-report write >/dev/null; out=$(st link-report approve by="flow: no open decisions"); code=$?
+check "approve from writing records approved, the spec's status line and spec.approved [status-state#R2.S1]" '[ $code -eq 0 ] && grep -q "\"spec\": \"approved\"" "$SF" && grep -q "^status: approved$" "$W/specs/link-report.md" && grep -q "\"type\":\"spec.approved\",\"spec\":\"link-report\".*\"by\":\"flow: no open decisions\"" "$W/events.jsonl" && jsonok "$SF"'
+before=$(snap); out=$(st link-report approve); code=$?
+check "approve twice: no change, 'already approved', exit 0 [status-state#R2.S3]" '[ $code -eq 0 ] && [ "$out" = "link-report is already approved" ] && [ "$before" = "$(snap)" ]'
+FACTREE_HOME="$W" bash $EVENT spec.step link-report '{"step":"checking"}'
+check "a spec.step after approve leaves it approved [status-state#R3.S1]" 'st link-report show | grep -q "\"spec\": \"approved\""'
+st link-report plan work=002-link-report >/dev/null; st link-report plan-approve work=002-link-report >/dev/null
+check "plan-approve sets the plan approved and its status line" 'grep -q "\"plan.002-link-report\": \"approved\"" "$SF" && grep -q "^status: approved$" "$WK/plan.md" && grep -q "\"type\":\"plan.approved\",\"work\":\"002-link-report\"" "$W/events.jsonl"'
+before=$(snap); out=$(st link-report implemented work=002-link-report); code=$?
+check "implemented with 0 of 5 tasks done prints the reason, changes nothing, exit 3 [status-state#R2.S2]" '[ $code -eq 3 ] && [ "$out" = "002-link-report can'"'"'t be implemented: 0 of 5 tasks done" ] && [ "$before" = "$(snap)" ]'
+for t in T1 T2 T3 T4 T5; do st link-report task-done work=002-link-report task=$t >/dev/null; done; out=$(st link-report task-done work=002-link-report task=T2)
+check "task-done counts each task once" '[ "$out" = "T2 is already done in 002-link-report" ] && grep -q "\"tasks.002-link-report\": \"T1 T2 T3 T4 T5\"" "$SF" && grep -q "\"total.002-link-report\": \"5\"" "$SF" && st link-report implemented work=002-link-report >/dev/null && grep -q "\"plan.002-link-report\": \"implemented\"" "$SF"'
+st link-report hold stage=review reason="acceptance run on SHORT-43" >/dev/null; held=$(cat "$SF"); st link-report release stage=review >/dev/null
+check "hold then release per work [status-state#R3.S3]" 'echo "$held" | grep -q "\"hold.002-link-report\": \"review acceptance run on SHORT-43\"" && echo "$held" | grep -q "\"hold_since.002-link-report\": \"20" && ! grep -q "hold" "$SF" && grep -q "\"type\":\"stage.released\",\"work\":\"002-link-report\"" "$W/events.jsonl"'
+before=$(snap); out=$(st link-report hold stage=review 'reason=a"b'); code=$?
+check "a value with \" is refused, naming the field" '[ $code -eq 3 ] && echo "$out" | grep -q "reason" && [ "$before" = "$(snap)" ]'
+rm -rf "$tmp"
+sw; st link-report write >/dev/null; st link-report approve >/dev/null; st link-report plan work=002-link-report >/dev/null; st link-report plan-approve work=002-link-report >/dev/null
+for t in T1 T2 T3 T4 T5; do st link-report task-done work=002-link-report task=$t >/dev/null; done; st link-report implemented work=002-link-report >/dev/null
+st link-report review-open work=002-link-report pr=0123 >/dev/null; code=$?
+check "review-open pr=0123 logs pr as a string and every event line is valid JSON [status-state#R3.S4]" '[ $code -eq 0 ] && grep -q "\"type\":\"review.opened\".*\"pr\":\"0123\"" "$W/events.jsonl" && ! grep -vq "^{.*\"data\":{.*}}$" "$W/events.jsonl" && ! grep -Eq "\"(pr|commit)\":[0-9]*0[0-9]*[,}]" "$W/events.jsonl" && grep -q "\"prs.002-link-report\": \"0123\"" "$SF"'
+rm -rf "$tmp"
+sw; st link-report write >/dev/null; for w in a b c d e f; do st link-report hold work=$w stage=build reason="r $w" >/dev/null & done; wait
+check "two writers at once: both moves applied, valid JSON, both events [status-state#R2.S4]" 'jsonok "$SF" && [ $(grep -c "\"hold\.[a-f]\": \"build r [a-f]\"" "$SF") -eq 6 ] && [ $(grep -c "\"type\":\"stage.held\"" "$W/events.jsonl") -eq 6 ] && grep -q "\"seq\": \"7\"" "$SF"'
+rm -rf "$tmp"
+sw; mkdir -p "$W/state/.lock-link-report"; touch -t 202001010000 "$W/state/.lock-link-report"; out=$(st link-report write); code=$?
+check "a lock older than 30 s is taken over" '[ $code -eq 0 ] && grep -q "\"spec\": \"writing\"" "$SF" && [ ! -d "$W/state/.lock-link-report" ]'
+sw; sh -c 'exit 0' & dead=$!; wait $dead; mkdir -p "$W/state/.lock-link-report"; echo $dead > "$W/state/.lock-link-report/pid"; out=$(st link-report write); code=$?
+check "a lock whose process is gone is taken over at once" '[ $code -eq 0 ] && grep -q "\"spec\": \"writing\"" "$SF" && [ ! -d "$W/state/.lock-link-report" ] && ! ls -a "$W/state" | grep -q stale'
+mkdir "$W/state/.lock-link-report"; echo $$ > "$W/state/.lock-link-report/pid"; before=$(snap); out=$(st link-report approve); code=$?
+check "a lock held by a running process: exit 4, nothing changed" '[ $code -eq 4 ] && [ "$before" = "$(snap)" ]'
+rmdir "$W/state/.lock-link-report" 2>/dev/null; rm -rf "$W/state/.lock-link-report"
+before=$(snap); out=$(st link-report hold stage=Review reason=x); c1=$?; out2=$(st link-report task-done work=002-link-report "task=T1 T2"); c2=$?; out3=$(st link-report hold stage=review reason=x pr="1 2"); c3=$?
+check "an upper-case stage and spaces in task or pr are refused, naming the field" '[ $c1 -eq 3 ] && echo "$out" | grep -q stage && [ $c2 -eq 3 ] && echo "$out2" | grep -q task && [ $c3 -eq 3 ] && echo "$out3" | grep -q pr && [ "$before" = "$(snap)" ]'
+echo 'garbage' >> "$SF"; before=$(snap); out=$(st link-report approve); code=$?; n=$(wc -l < "$SF" | tr -d " ")
+check "an unreadable state line refuses the move and names it" '[ $code -eq 3 ] && [ "$out" = "state/link-report.json line $n is not readable; fix or remove it" ] && [ "$before" = "$(snap)" ]'
+rm -rf "$tmp"
+# Staleness by what the plan covers (002-link-report: R5, R6).
+mg() { FACTREE_HOME="$1" bash "$ST" migrate >/dev/null 2>&1; }
+spec_edit() { awk "$1" "$W/specs/link-report.md" > "$tmp/s" && cp "$tmp/s" "$W/specs/link-report.md"; }
+sw; st link-report approve >/dev/null; st link-report plan work=002-link-report >/dev/null; st link-report plan-approve work=002-link-report >/dev/null
+check "plan-approve stores a sum per covered requirement" '[ $(grep -c "\"cover\.002-link-report\.R[56]\": \"[0-9]* [0-9]*\"" "$SF") -eq 2 ] && ! grep -q "cover\.002-link-report\.R[1-4]" "$SF" && jsonok "$SF"'
+spec_edit '/^### Requirement: R1 /{skip=1} /^### Requirement: R2 /{skip=0} !skip{sub(/^retired: \[\]$/, "retired: [R1]"); print}'; out=$(st link-report stale); code=$?
+check "retiring an uncovered requirement leaves plan, build and review not stale [status-state#R4.S1]" '[ $code -eq 0 ] && [ -z "$out" ]'
+spec_edit '/^## Purpose/{print; getline; print "A changed word. " $0; next} {print}'; out=$(st link-report stale)
+check "a Purpose edit makes nothing stale [status-state#R4.S3]" '[ -z "$out" ] && grep -q "^A changed word" "$W/specs/link-report.md"'
+spec_edit '{print} /^### Requirement: R5 /{print "#### Scenario: S3 New"; print "- **THEN** more"}'; out=$(st link-report stale)
+st link-report plan-approve work=002-link-report >/dev/null; out2=$(st link-report stale); out3=$(st link-report plan-approve work=002-link-report)
+check "a covered requirement gaining a scenario makes the plan stale until plan-approve [status-state#R4.S2]" '[ "$out" = 002-link-report ] && [ -z "$out2" ] && [ $(grep -c "\"type\":\"plan.approved\"" "$W/events.jsonl") -eq 2 ] && [ "$out3" = "002-link-report is already approved" ]'
+spec_edit '/^Source: JIRA-517/{print "Source: JIRA-999"; next} {print}'; out=$(st link-report stale)
+check "a Source: line or spacing change makes nothing stale" '[ -z "$out" ]'
+spec_edit '/^### Requirement: R6 /{skip=1} /^## Code/{skip=0} !skip{print}'; out=$(st link-report stale)
+check "a covered requirement retired makes the plan stale" '[ "$out" = 002-link-report ]'
+for t in T1 T2 T3 T4 T5; do st link-report task-done work=002-link-report task=$t >/dev/null; done
+st link-report implemented work=002-link-report >/dev/null; st link-report review-open work=002-link-report pr=1 >/dev/null; st link-report merged work=002-link-report >/dev/null; out=$(st link-report stale)
+spec_edit '{print} /^### Requirement: R5 /{print "#### Scenario: S4 Newer"}'; out2=$(st link-report stale)
+check "a merged plan is not stale for a retired requirement, only for a changed one [status-state D6]" 'grep -q "\"review.002-link-report\": \"merged\"" "$SF" && [ -z "$out" ] && [ "$out2" = 002-link-report ]'
+rm -rf "$tmp"
+sw; st link-report approve >/dev/null; st link-report plan-approve work=002-link-report >/dev/null
+awk '{ printf "%s\r\n", $0 }' "$W/specs/link-report.md" > "$tmp/s" && cp "$tmp/s" "$W/specs/link-report.md"; out=$(st link-report stale)
+check "line endings changed to CRLF make nothing stale" '[ -z "$out" ] && grep -q "$(printf "\r")" "$W/specs/link-report.md"'
+rm -rf "$tmp"
+sw; sed 's/^status: draft$/status: approved/' "$W/specs/link-report.md" > "$tmp/s" && cp "$tmp/s" "$W/specs/link-report.md"
+mv "$WK/plan.md" "$tmp/plan.md"; st link-report write >/dev/null; st link-report approve >/dev/null; mv "$tmp/plan.md" "$WK/plan.md"
+out=$(st link-report plan work=002-link-report); code=$?
+check "plan after the plan skill wrote plan.md records planned, sets plan and logs plan.created" '[ $code -eq 0 ] && [ "$out" = "link-report: plan" ] && grep -q "\"plan\": \"002-link-report\"" "$SF" && grep -q "\"plan.002-link-report\": \"planned\"" "$SF" && grep -q "\"type\":\"plan.created\",\"work\":\"002-link-report\"" "$W/events.jsonl"'
+chmod 200 "$W/events.jsonl"; out=$(st link-report hold stage=build reason=x); code=$?; chmod 644 "$W/events.jsonl"
+check "a move on a state that lacks no plan doesn't read events.jsonl" '[ $code -eq 0 ] && [ "$out" = "link-report: hold" ]'
+rm -rf "$tmp"
+sw; for i in 1 2 3 4; do mg "$W" & done; for w in a b c d e f g h i j k l; do st link-report hold work=$w stage=build reason=r >/dev/null & done; wait
+check "migrates in parallel with moves lose nothing" 'jsonok "$SF" && [ $(grep -c "\"hold\.[a-l]\": \"build r\"" "$SF") -eq 12 ] && [ $(grep -c "\"type\":\"stage.held\"" "$W/events.jsonl") -eq 12 ] && grep -q "\"seq\": \"12\"" "$SF"'
+rm -rf "$tmp"
+# Migrate: the test fixture, then a copy of this repo's own workspace (local only, so skipped where there is none).
+tmp=$(mktemp -d); W="$tmp/.factree"; cp -R tests/fixtures/workspace "$W"; ev=$(cksum < "$W/events.jsonl"); mg "$W"; code=$?
+check "migrate on a copy of the test fixture writes one state file per spec [status-state#R6.S1]" '[ $code -eq 0 ] && [ "$(ls "$W/state")" = link-report.json ] && jsonok "$W/state/link-report.json" && [ "$ev" = "$(cksum < "$W/events.jsonl")" ]'
+check "migrate maps files and events, and snapshots only plans not stale today" 'SF="$W/state/link-report.json"; grep -q "\"spec\": \"approved\"" "$SF" && grep -q "\"plan\": \"002-link-report\"" "$SF" && grep -q "\"plan.001-link-report\": \"approved\"" "$SF" && grep -q "\"cover.002-link-report.R5\"" "$SF" && ! grep -q "cover.001-link-report.R" "$SF" && grep -q "\"cover.001-link-report.stale\"" "$SF" && [ "$(st link-report stale)" = 001-link-report ]'
+rm -rf "$tmp"
+sw; out=$(st link-report plan-approve work=002-link-report); code=$?
+check "plan-approve on an unmigrated workspace succeeds" '[ $code -eq 0 ] && grep -q "\"plan.002-link-report\": \"approved\"" "$SF" && grep -q "^status: approved$" "$WK/plan.md" && grep -q "cover.002-link-report.R6" "$SF"'
+rm -rf "$tmp"
+tmp=$(mktemp -d); W="$tmp/.factree"; cp -R tests/fixtures/workspace "$W"; cp -R tests/fixtures/workspace "$tmp/m"; mg "$tmp/m"
+out=$(st link-report plan-approve work=002-link-report); code=$?
+check "an unmigrated plan approved on disk answers already approved" '[ $code -eq 0 ] && [ "$out" = "002-link-report is already approved" ] && [ ! -f "$W/state/link-report.json" ]'
+st link-report hold work=002-link-report stage=build reason=x >/dev/null
+check "a move on a spec with no state file seeds it like migrate" '[ "$(grep -v -e "\"seq\"" -e "hold" "$W/state/link-report.json")" = "$(grep -v "\"seq\"" "$tmp/m/state/link-report.json")" ] && grep -q "\"seq\": \"1\"" "$W/state/link-report.json"'
+rm -rf "$tmp"
+tmp=$(mktemp -d); W="$tmp/.factree"; cp -R tests/fixtures/workspace "$W"
+for e in 'review.opened {"pr":"15"}' 'review.opened {"pr":"17"}' 'review.state {"pr":"17","state":"MERGED"}' 'review.opened {"pr":"3"}' 'review.state {"pr":"3","state":"CLOSED"}'; do
+  w=002-link-report; case "$e" in *'"3"'*) w=001-link-report ;; esac
+  printf '{"ts":"2026-11-20T10:00:00Z","type":"%s","work":"%s","actor":"t","data":%s}\n' "${e%% *}" "$w" "${e#* }" >> "$W/events.jsonl"; done; mg "$W"   # old logs hold these; event.sh now refuses them
+check "review stage as the UI reads it: an unstated PR superseded by a later merged one, a closed one alone" 'grep -q "\"review.002-link-report\": \"merged\"" "$W/state/link-report.json" && grep -q "\"review.001-link-report\": \"closed\"" "$W/state/link-report.json"'
+rm -rf "$tmp"
+own="$(cd "$(git rev-parse --git-common-dir)/.." && pwd)/.factree"
+if [ -d "$own/specs" ]; then
+  tmp=$(mktemp -d); W="$tmp/.factree"; mkdir -p "$W"; cp -R "$own/specs" "$own/work" "$own/events.jsonl" "$W/"
+  n=$(ls "$W/specs"/*.md | wc -l | tr -d " "); mg "$W"; code=$?; m=$(ls "$W/state"/*.json | wc -l | tr -d " ")
+  ok=1; for f in "$W/state"/*.json; do jsonok "$f" || ok=0; done
+  check "migrate on this repo's workspace writes one state file per spec ($n) [status-state#R6.S1]" '[ $code -eq 0 ] && [ "$m" = "$n" ] && [ $ok = 1 ]'
+  check "after migrate, releases reads approved and no build-status plan is stale, the row's 065 included [status-state#R6.S1, D6]" 'grep -q "\"spec\": \"approved\"" "$W/state/releases.json" && grep -q "\"plan\": \"065-release-0-18-1\"" "$W/state/build-status.json" && [ -z "$(st build-status stale)" ]'
+  check "a pull request with no state is superseded by a later merged one (spec-flow 032: 15, 17) [status-state#R6.S3]" 'grep -q "\"review.032-flow-tab-link\": \"merged\"" "$W/state/spec-flow.json"'
+  before=$(cksum "$W/state"/*.json "$W/events.jsonl" "$W/specs"/*.md); mg "$W"
+  check "migrate twice changes nothing [status-state#R6.S2]" '[ "$before" = "$(cksum "$W/state"/*.json "$W/events.jsonl" "$W/specs"/*.md)" ]'
+  rm -rf "$tmp"
+else echo "skip migrate on this repo's workspace: none at $own"; fi
+# Per pull request, approval fields, per-task starts, and the followers (whole-branch review fixes).
+sw; st link-report write >/dev/null; st link-report approve by="flow: no open decisions" >/dev/null
+check "approve fills approved_by and approved_at, and the spec validates [status-state#R2.S1]" 'grep -q "^approved_by: flow: no open decisions$" "$W/specs/link-report.md" && grep -q "^approved_at: $(date -u +%Y-%m-%d)$" "$W/specs/link-report.md" && bash $P/skills/spec/scripts/validate.sh "$W/specs/link-report.md" 2>&1 | grep -q " 0 error(s)"'
+sed -i.bak 's/^approved_by:.*/approved_by: Someone/' "$W/specs/link-report.md"; rm -f "$W/specs/link-report.md.bak"; st link-report approve by=other >/dev/null
+check "an already answer leaves a filled approval alone [status-state#R2.S3]" 'grep -q "^approved_by: Someone$" "$W/specs/link-report.md"'
+st link-report plan work=002-link-report >/dev/null; st link-report plan-approve work=002-link-report by="the flow" >/dev/null
+check "plan-approve fills the plan's approved_by and approved_at [status-state#R2.S1]" 'grep -q "^approved_by: the flow$" "$WK/plan.md" && grep -q "^approved_at: $(date -u +%Y-%m-%d)$" "$WK/plan.md"'
+st link-report build-start work=002-link-report task=T1 >/dev/null; out=$(st link-report build-start work=002-link-report task=T1); st link-report build-start work=002-link-report task=T2 >/dev/null
+check "build-start per task: the plan building, a task.started each, a repeat already [status-state#R3.S1]" 'grep -q "\"plan.002-link-report\": \"building\"" "$SF" && [ $(grep -c "\"type\":\"task.started\".*\"task\":\"T[12]\"" "$W/events.jsonl") -eq 2 ] && echo "$out" | grep -q "already"'
+FACTREE_HOME="$W" bash $EVENT task.failed 002-link-report '{"task":"T1","reason":"over budget"}'; out=$(st link-report build-start work=002-link-report task=T1); out2=$(st link-report build-start work=002-link-report task=T1)
+check "a failed task started again logs task.started once more, a plain repeat does not [status-state#R3.S1]" '[ $(grep -c "\"type\":\"task.started\".*\"task\":\"T1\"" "$W/events.jsonl") -eq 2 ] && echo "$out2" | grep -q already && ! echo "$out" | grep -q already'
+for n in 1 2 3 4 5; do st link-report task-done work=002-link-report task=T$n >/dev/null; done
+st link-report implemented work=002-link-report >/dev/null
+st link-report review-open work=002-link-report pr=11 >/dev/null; st link-report review-open work=002-link-report pr=12 >/dev/null
+out=$(st link-report merged work=002-link-report pr=11)
+check "one merged pull request of two leaves the review open [status-state#R3.S3]" 'grep -q "\"review.002-link-report\": \"open\"" "$SF" && grep -q "\"type\":\"review.merged\".*\"pr\":\"11\"" "$W/events.jsonl"'
+out=$(st link-report merged work=002-link-report pr=11)
+check "a repeat for the same pull request is already [status-state#R3.S3]" 'echo "$out" | grep -q "already"'
+st link-report merged work=002-link-report pr=12 >/dev/null
+check "the last merged makes the review merged [status-state#R3.S3]" 'grep -q "\"review.002-link-report\": \"merged\"" "$SF"'
+rm -rf "$tmp"
+sw; st link-report write >/dev/null; st link-report approve >/dev/null; st link-report plan work=002-link-report >/dev/null; st link-report plan-approve work=002-link-report >/dev/null
+for n in 1 2 3 4 5; do st link-report task-done work=002-link-report task=T$n >/dev/null; done
+st link-report implemented work=002-link-report >/dev/null; st link-report review-open work=002-link-report pr=11 >/dev/null; st link-report review-open work=002-link-report pr=12 >/dev/null
+st link-report merged work=002-link-report pr=11 >/dev/null; st link-report closed work=002-link-report pr=12 >/dev/null
+check "one merged and one closed, none open: closed [status-state D4]" 'grep -q "\"review.002-link-report\": \"closed\"" "$SF"'
+rm -rf "$tmp"
+# The followers record a merge in the state.
+tmp=$(mktemp -d); W="$tmp/ws/.factree"; mkdir -p "$W/specs" "$W/work/002-link-report/backend" "$tmp/ws/repo" "$tmp/bin"; : > "$W/events.jsonl"; SF="$W/state/link-report.json"
+sed 's/^status: approved$/status: draft/' tests/fixtures/workspace/specs/link-report.md > "$W/specs/link-report.md"
+sed 's/^status: approved$/status: draft/' tests/fixtures/workspace/work/002-link-report/plan.md > "$W/work/002-link-report/plan.md"
+for n in 1 2; do printf '### T%s: task %s\n' $n $n; done > "$W/work/002-link-report/backend/tasks.md"
+printf '#!/usr/bin/env bash\n[ "$1 $2" = "pr view" ] && cat "$(dirname "$0")/state"; exit 0\n' > "$tmp/bin/gh"; chmod +x "$tmp/bin/gh"
+sf() { FACTREE_HOME="$W" bash "$ST" link-report "$@" >/dev/null 2>&1; }
+sf write; sf approve; sf plan work=002-link-report; sf plan-approve work=002-link-report; sf build-start work=002-link-report; sf task-done work=002-link-report task=T1; sf task-done work=002-link-report task=T2; sf implemented work=002-link-report; sf review-open work=002-link-report pr=11
+printf 'MERGED UNKNOWN \n' > "$tmp/bin/state"
+(cd "$tmp/ws/repo" && PATH="$tmp/bin:$PATH" FACTREE_HOME="$W" bash "$WR" 002-link-report 11 --once >/dev/null 2>&1)
+check "wait-review records a merge in the state [status-state#R3.S3]" 'grep -q "\"review.002-link-report\": \"merged\"" "$SF"'
+rm -rf "$tmp"
+check "state.sh stays under 300 lines" '[ $(wc -l < "$ST") -lt 300 ]'
 
 echo "# releases"
 VB="$PWD/tests/version-bump.sh"
