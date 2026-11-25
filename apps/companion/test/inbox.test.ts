@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -135,6 +135,30 @@ describe("deciding in the companion", () => {
     expect(text).toMatch(/^approved_by: John Doe \(via companion\)$/m);
     expect(text).toMatch(/^approved_at: 2026-11-17$/m);
     expect(log().filter((e) => e.type === "spec.approved")).toHaveLength(1);
+    expect(log()).toHaveLength(n);
+  });
+
+  it("a draft spec nobody is waiting on is 409 and nothing is written [companion-decisions#R10.S2]", () => {
+    spec("version-check", "draft");
+    events([{ ts: at(1), type: "spec.step", spec: "version-check", data: { step: "gaps" } }]);   // still being written: no card
+    const file = join(root, "specs", "version-check.md");
+    const before = readFileSync(file, "utf8"), n = log().length;
+    expect(() => decide({ kind: "approve-spec", spec: "version-check" })).toThrow("isn't waiting");
+    expect(readFileSync(file, "utf8")).toBe(before);
+    expect(log()).toHaveLength(n);
+    expect(existsSync(join(root, "state", "version-check.json"))).toBe(false);
+  });
+
+  it("a card blocked by an open question is 409 with the reason and nothing is written [companion-decisions#R4.S2]", () => {
+    spec("version-check", "draft");
+    events([
+      { ts: at(20), type: "spec.step", spec: "version-check", data: { step: "approval" } },
+      { ts: at(10), type: "question.asked", spec: "version-check", data: { n: 2, text: "Which signal?", why: "", proposal: "Local" } },
+    ]);
+    const file = join(root, "specs", "version-check.md");
+    const before = readFileSync(file, "utf8"), n = log().length;
+    expect(() => decide({ kind: "approve-spec", spec: "version-check" })).toThrow("Answer question 2 first");
+    expect(readFileSync(file, "utf8")).toBe(before);
     expect(log()).toHaveLength(n);
   });
 
