@@ -547,8 +547,8 @@ function applyDecision(root, user, body, cards, today = (/* @__PURE__ */ new Dat
 			const spec = slug("spec");
 			const card = cards.find((c) => c.kind === "spec" && c.spec === spec);
 			const file = join(root, "specs", `${spec}.md`);
-			const retry = !card && existsSync(file) && frontValue(file, "status") === "approved" && !frontValue(file, "approved_by");
-			if (!card && !retry) throw new DecisionError(409, `${spec} isn't waiting for approval`);
+			const done = !card && existsSync(file) && frontValue(file, "status") === "approved";
+			if (!card && !done) throw new DecisionError(409, `${spec} isn't waiting for approval`);
 			if (card && !card.approvable) throw new DecisionError(409, card.blockedReason ?? "Not approvable here");
 			stateMove(root, spec, "approve", [`by=${by}`, "via=companion"]);
 			const fields = {

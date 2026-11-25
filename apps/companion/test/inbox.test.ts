@@ -112,6 +112,32 @@ describe("deciding in the companion", () => {
 
   const design = "## Patterns\n\n### Reused\n- **P1 X:** `a.ts:1`. Fits.\n\n### New\nNone.\n";
 
+  it("approving an approved spec again answers and changes nothing [status-state#R2.S3]", () => {
+    spec("version-check", "draft");
+    events([]);
+    decide({ kind: "approve-spec", spec: "version-check" });
+    const file = join(root, "specs", "version-check.md");
+    const before = readFileSync(file, "utf8"), n = log().length;
+    expect(() => decide({ kind: "approve-spec", spec: "version-check" })).not.toThrow();
+    expect(readFileSync(file, "utf8")).toBe(before);
+    expect(log()).toHaveLength(n);
+  });
+
+  it("a repeat approval fills in approved_by and approved_at a failed write left out, without a new event [status-state#R7.S1]", () => {
+    spec("version-check", "draft");
+    events([]);
+    decide({ kind: "approve-spec", spec: "version-check" });
+    const file = join(root, "specs", "version-check.md");
+    writeFileSync(file, readFileSync(file, "utf8").replace(/^approved_(by|at):.*\n/gm, ""));
+    const n = log().length;
+    decide({ kind: "approve-spec", spec: "version-check" });
+    const text = readFileSync(file, "utf8");
+    expect(text).toMatch(/^approved_by: John Doe \(via companion\)$/m);
+    expect(text).toMatch(/^approved_at: 2026-11-17$/m);
+    expect(log().filter((e) => e.type === "spec.approved")).toHaveLength(1);
+    expect(log()).toHaveLength(n);
+  });
+
   it("a refused move returns 409 with the script's message [status-state#R7.S1]", () => {
     spec("version-check", "approved");
     plan("015-build", "version-check", design);
@@ -124,7 +150,7 @@ describe("deciding in the companion", () => {
     expect(readFileSync(join(root, "work", "015-build", "plan.md"), "utf8")).not.toMatch(/^status: approved$/m);
   });
 
-  it("approving a plan on an un-migrated workspace succeeds and state reads approved [status-state#R7.S1]", () => {
+  it("un-migrated workspace (no state/): approving a plan seeds the state and it reads approved [status-state#R7.S1]", () => {
     spec("version-check", "approved");
     plan("015-build", "version-check", design);
     events([]);
@@ -193,7 +219,7 @@ describe("deciding in the companion", () => {
     events([]);
     const before = readFileSync(join(root, "specs", "link-report.md"), "utf8");
     expect(() => decide({ kind: "edit-requirement", spec: "link-report", text: "R1 …" })).toThrow("Unknown decision");
-    expect(() => decide({ kind: "approve-spec", spec: "link-report" })).toThrow("isn't waiting");
+    expect(() => decide({ kind: "approve-spec", spec: "no-such-spec" })).toThrow("isn't waiting");
     expect(readFileSync(join(root, "specs", "link-report.md"), "utf8")).toBe(before);
     expect(readFileSync(join(root, "events.jsonl"), "utf8").trim()).toBe("");
   });

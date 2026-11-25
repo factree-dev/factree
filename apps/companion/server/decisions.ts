@@ -230,9 +230,9 @@ export function applyDecision(root: string, user: string, body: unknown, cards: 
       const spec = slug("spec");
       const card = cards.find((c) => c.kind === "spec" && c.spec === spec);
       const file = join(root, "specs", `${spec}.md`);
-      // Approved already but its approval fields missing: a retry after a failed write, which completes them.
-      const retry = !card && existsSync(file) && frontValue(file, "status") === "approved" && !frontValue(file, "approved_by");
-      if (!card && !retry) throw new DecisionError(409, `${spec} isn't waiting for approval`);
+      // Approved already: answering again is fine, and fills in approval fields a failed write left out.
+      const done = !card && existsSync(file) && frontValue(file, "status") === "approved";
+      if (!card && !done) throw new DecisionError(409, `${spec} isn't waiting for approval`);
       if (card && !card.approvable) throw new DecisionError(409, card.blockedReason ?? "Not approvable here");
       stateMove(root, spec, "approve", [`by=${by}`, "via=companion"]);   // sets status and logs spec.approved; already approved is fine
       const fields = { approved_by: `${by} (via companion)`, approved_at: today };
