@@ -171,11 +171,11 @@ Changed: added R4 Export limit; R2 gains S3            ← edits only
 
 Decisions, your calls, open questions and source coverage are in the spec; give them when the user says "details".
 
-**No approval stop** (factory-flow R1, D2): if no decision is open (every brief answered, no open question blocking a requirement), don't ask for approval. Set `status: approved`, `approved_by: "flow: no open decisions"` and `approved_at`, log `spec.approved` with `{"by":"flow: no open decisions"}`, send the summary as a report, and go straight on as **On approval** says. If a decision is still open, ask it as a brief and go on once it's answered (factory-flow R1.S3). With `flow: step`, ask **"Approve this spec?"** as before.
+**No approval stop** (factory-flow R1, D2): if no decision is open (every brief answered, no open question blocking a requirement), don't ask for approval. Run `bash <plugin>/scripts/state.sh <spec-id> approve by="flow: no open decisions"` (it sets `status`, `approved_by` and `approved_at`), send the summary as a report, and go straight on as **On approval** says. If a decision is still open, ask it as a brief and go on once it's answered (factory-flow R1.S3). With `flow: step`, ask **"Approve this spec?"** as before.
 
-**Compact requests:** after step 10, plan the spec in the same run, following `/factree:plan`'s process: load its skill file from `<plugin>/skills/plan/SKILL.md`. Then, if nothing is open in either, record both as approved by the flow (`approved_by: "flow: no open decisions"`), log `spec.approved` and the plan's events, send both summaries as a report, and go straight on to build the plan (with `flow: step`, ask **"Approve the spec and plan?"** instead): load `<plugin>/skills/build/SKILL.md` and follow it (factory-flow R1.S2). If the spec ended up with more than 3 requirements, more than one vertical, or something new, say it's now standard, ask for spec approval alone, and leave planning to `/factree:plan`.
+**Compact requests:** after step 10, plan the spec in the same run, following `/factree:plan`'s process: load its skill file from `<plugin>/skills/plan/SKILL.md`. Then, if nothing is open in either, approve both by the flow (`state.sh <spec-id> approve by="flow: no open decisions"`, and the plan's `plan-approve`), send both summaries as a report, and go straight on to build the plan (with `flow: step`, ask **"Approve the spec and plan?"** instead): load `<plugin>/skills/build/SKILL.md` and follow it (factory-flow R1.S2). If the spec ended up with more than 3 requirements, more than one vertical, or something new, say it's now standard, ask for spec approval alone, and leave planning to `/factree:plan`.
 
-- **On approval** (by the flow, or by the user under `flow: step`): set `status: approved`, `approved_by` (`flow: no open decisions`, or the user's name from `git config user.name`) and `approved_at`. Log `spec.approved`. Then go straight on to plan it: say "Planning <spec-id>.", load `<plugin>/skills/plan/SKILL.md` and follow it (factory-flow R1). With `flow: step`, say it's ready to plan with `/factree:plan` and stop instead.
+- **On approval** (by the flow, or by the user under `flow: step`): run `bash <plugin>/scripts/state.sh <spec-id> approve by="<by>"`, with `by` as `flow: no open decisions` or the user's name from `git config user.name`. It sets `status`, `approved_by` and `approved_at`. Then go straight on to plan it: say "Planning <spec-id>.", load `<plugin>/skills/plan/SKILL.md` and follow it (factory-flow R1). With `flow: step`, say it's ready to plan with `/factree:plan` and stop instead.
 - **On changes:** make them, re-run step 10, summarise what changed, ask again.
 - **Approval covers only what they've seen.** "Looks good" to an idea is not approval of a spec you haven't shown.
 
@@ -200,15 +200,19 @@ On the first `spec.step` also include `"title"` and `"sources"`, so a spec still
 - Just before sending a brief, one `question.asked` per numbered decision in it (the number is `n`, counting on across briefs): with `{"n":2,"text":"<the question>","why":"<what the answer changes>","proposal":"<your recommendation, or empty>","options":["<another option> — <what it changes>"]}`. `options` lists the choices other than the recommendation, so the Factree UI can offer them.
 - When the user answers: `question.answered` with `{"n":2,"answer":"<their answer in a few words>"}`.
 
+
 **Links to the Factree UI:** whenever you ask the user a question, ask for approval, or have just written the spec file, run `bash <plugin>/scripts/link.sh <spec-id>`. If it prints a line, end your message with that line, unchanged, so the user can open the spec in one click. It prints nothing when the UI isn't running; then add nothing.
 
 **Changes to the spec:**
 
+A move `state.sh` refuses (exit 3) is reported to the user, never logged around it.
+
+
 | When | Event |
 |---|---|
-| New spec file written | `spec.created` with `{"requirements":N,"sources":[...]}` |
+| New spec file written | `bash <plugin>/scripts/state.sh <spec-id> write` |
+| Approved spec about to be edited again | `state.sh <spec-id> edit`, before the edit |
 | Existing spec edited | `spec.updated` with `{"added":["R4"],"changed":["R2"],"retired":[]}` |
-| Approved | `spec.approved` with `{"by":"<name>"}` |
 | Question added / answered | `question.opened` `{"id":"Q3"}` / `question.resolved` `{"id":"Q1","by":"D2"}` |
 | Decision recorded | `decision.recorded` with `{"id":"D2","by":"<name>"}` |
 | Your own call | `decision.recorded` with `{"id":"call-1","by":"Claude","call":true,"text":"<the call, in a few words>"}` |

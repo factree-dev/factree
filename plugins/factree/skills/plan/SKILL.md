@@ -56,7 +56,6 @@ Log each numbered decision in a plan brief as `question.asked` on the spec, with
 
 Log progress as you go, so the companion shows it live (live-activity R4): `bash <plugin>/scripts/event.sh stage.step <spec-id> '{"stage":"plan","step":"starting"}'` now, then the same with `"step":"reading the repo"` at step 3, `"designing"` at step 5, `"writing tasks"` at step 7 and `"checking"` at step 8, adding `"work"` once the work folder exists.
 
-
 Decide which requirements this plan covers, then confirm with the user.
 
 - **Spec never built** (no `live` status in its history): all requirements.
@@ -197,21 +196,23 @@ Plan 002-link-report: 2 tasks (T1 backend, T2 frontend), every scenario covered.
 
 **No approval stop** (factory-flow R2, D2): if step 6 was skipped (the design adds no new pattern, dependency or lens, and no load question is open), don't ask, whatever `approve_plans` says. Say "Plan approved by the flow: nothing in it needs you." with the summary and your calls, and record the approver everywhere as `flow: no open decisions` (`design_approved_by`, `approved_by`, and `"by"` in both events). With `flow: step`, `approve_plans: nothing-new` approves it as `preference: approve_plans`, and `ask` (the default there) asks. Otherwise, when step 6 raised decisions they were settled there:
 
-List your calls. Under `flow: step`, ask **"Approve this plan?"**; otherwise the decisions settled in step 6 approve it. On approval set `status: approved`, `approved_by`, `approved_at` in `plan.md`, and log `plan.approved`. If step 6 was skipped, also set `design_approved_by` and `design_approved_at` and log `plan.design_approved` first, since the one approval covered the design. Then make the spec updates from step 6. Then go straight on to build it, whoever approved it (you by preference, the user here or in the companion): say "Building <work-id>.", load `<plugin>/skills/build/SKILL.md` and follow it (factory-flow R2). With `flow: step`, say the plan is ready to build and stop instead.
+List your calls. Under `flow: step`, ask **"Approve this plan?"**; otherwise the decisions settled in step 6 approve it. On approval run `bash <plugin>/scripts/state.sh <spec-id> plan-approve work=<work-id> by="<name>"` (it sets `status`, `approved_by` and `approved_at` in `plan.md`). If step 6 was skipped, also set `design_approved_by` and `design_approved_at` and log `plan.design_approved` first, since the one approval covered the design. Then make the spec updates from step 6. Then go straight on to build it, whoever approved it (you by preference, the user here or in the companion): say "Building <work-id>.", load `<plugin>/skills/build/SKILL.md` and follow it (factory-flow R2). With `flow: step`, say the plan is ready to build and stop instead.
 
-**Amending an approved plan** (planning R6): when the spec changes after the plan was approved and you add or change tasks to cover it, the plan must be approved again, or it reads as out of date. Update the plan files and coverage, then ask any new pattern, dependency or lens as a decision, as in step 6. Once nothing is open, set a new `approved_at` (and `approved_by: "flow: no open decisions"` if the flow approves it) and log `plan.approved` again with the new task count. Then carry on building.
+**Amending an approved plan** (planning R6): when the spec changes after the plan was approved and you add or change tasks to cover it, the plan must be approved again, or it reads as out of date. Update the plan files and coverage, then ask any new pattern, dependency or lens as a decision, as in step 6. Once nothing is open, run `state.sh <spec-id> plan-approve work=<work-id> by="<name>"` again; it logs `plan.approved` (`by` is `flow: no open decisions` if the flow approves it). Then carry on building.
 
 ## Logging events
+
+A move `state.sh` refuses (exit 3) is reported to the user, never logged around it.
+
 
 `bash <plugin>/scripts/event.sh <type> <id> '<json>'`:
 
 | When | Event | Id |
 |---|---|---|
-| Work folder and first draft written | `plan.created` with `{"spec":"<spec-id>","scope":["R1",…],"verticals":["backend","frontend"]}` | work id |
+| Work folder created | `bash <plugin>/scripts/state.sh <spec-id> plan work=<work-id>` | n/a |
 | Design approved | `plan.design_approved` with `{"by":"<name>","new_patterns":["N1"]}` | work id |
 | Decision added to the spec | `decision.recorded` with `{"id":"D4","by":"<name>","from":"<work-id>"}` | spec id |
 | Your own call | `decision.recorded` with `{"id":"call-1","by":"Claude","call":true,"from":"<work-id>","text":"<the call>"}` | spec id |
-| Plan approved | `plan.approved` with `{"by":"<name>","tasks":N}` | work id |
 
 ## Links to the Factree UI
 

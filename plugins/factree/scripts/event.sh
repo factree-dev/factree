@@ -2,11 +2,10 @@
 # Append one event to events.jsonl in the Factree workspace (see root.sh).
 # Usage: event.sh <type> <subject-id> ['<json object>']
 #   subject-id is a spec id for spec.*, question.*, decision.*; a work id for plan.*
-# Example: event.sh spec.approved link-report '{"by":"John Doe"}'
+# Example: event.sh question.asked link-report '{"id":"Q1"}'
 # Pull request events (multi-repo R8): review.opened {pr,url,repo,tasks,base,after,sha} (after: optional list of "repo#number" PRs to merge first; sha: the head commit pushed); review.restacked {pr,repo,task,base,sha} (sha: the head commit after a restack, fix or update push); review.comment, review.state and
 # review.reply carry the same "repo" (a repo folder as in repos.md). An event without "repo" is the only repo's.
-# Status moves (the types in $moves below) are logged by state.sh only (status-state R7).
-# Held stages (build-status R4): stage.held {stage,reason} when the build or review holds the next stage, and stage.released {stage} when it goes on; subject is the work id, so the UI reads them by work.
+# Status moves (the types in $moves below) are never logged with event.sh: run the matching state.sh move (status-state R7).
 # Inside Claude Code, the event also records the session (CLAUDE_CODE_SESSION_ID).
 
 types="spec.created spec.updated spec.approved spec.step question.asked question.answered question.opened question.resolved decision.recorded plan.created plan.design_approved plan.approved plan.implemented task.started task.done task.failed task.blocked spec.verified decision.feedback task.reviewed bug.escaped lesson.proposed lesson.approved lesson.rejected review.opened review.restacked review.comment review.state review.reply stage.step stage.held stage.released agent.started task.waiting task.fixing branch.reviewed"
