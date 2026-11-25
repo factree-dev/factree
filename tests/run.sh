@@ -523,7 +523,7 @@ t2open() { awk "/^### T2:/{f=1;next} /^### /{f=0} f" "$tmp/.factree/work/007-wid
 rtmp; rvs "$tmp" T2; rv "$tmp" T2 pass; out=$(FACTREE_HOME="$tmp/.factree" bash "$TD" 007-widget-export T2 0123456 60 "npm test" 2>&1)
 check "a numeric commit stays a quoted string in a valid event line [status-state#R7.S2]" 'grep "\"type\":\"task.done\"" "$tmp/.factree/events.jsonl" | grep -q "\"commit\":\"0123456\",\"lines\":60,"'
 rm -rf "$tmp"
-rtmp; rvs "$tmp" T2; rv "$tmp" T2 pass; rm -rf "$tmp/.factree/state"; FACTREE_HOME="$tmp/.factree" bash "$ST" widget-export write >/dev/null; out=$(tdr)
+rtmp; rvs "$tmp" T2; rv "$tmp" T2 pass; rm -rf "$tmp/.factree/state"; grep -v "\"type\":\"plan\." "$tmp/.factree/events.jsonl" > "$tmp/e"; mv "$tmp/e" "$tmp/.factree/events.jsonl"; sed "s/^status: approved/status: draft/" "$tmp/.factree/work/007-widget-export/plan.md" > "$tmp/p" && mv "$tmp/p" "$tmp/.factree/work/007-widget-export/plan.md"; FACTREE_HOME="$tmp/.factree" bash "$ST" widget-export write >/dev/null; out=$(tdr)   # a plan neither approved on disk nor in the log seeds as not approved
 check "a refused move passes state.sh's exit code and leaves the steps unticked [status-state#R7.S2]" 'echo "$out" | grep -q "rc=3" && ! echo "$out" | grep -q "^T2 done" && t2open'
 rm -rf "$tmp"
 rtmp; rvs "$tmp" T2; rv "$tmp" T2 pass; out=$(tdr)
@@ -911,7 +911,8 @@ check "a move on a spec with no state file seeds it like migrate" '[ "$(grep -v 
 rm -rf "$tmp"
 tmp=$(mktemp -d); W="$tmp/.factree"; cp -R tests/fixtures/workspace "$W"
 for e in 'review.opened {"pr":"15"}' 'review.opened {"pr":"17"}' 'review.state {"pr":"17","state":"MERGED"}' 'review.opened {"pr":"3"}' 'review.state {"pr":"3","state":"CLOSED"}'; do
-  w=002-link-report; case "$e" in *'"3"'*) w=001-link-report ;; esac; FACTREE_HOME="$W" bash $EVENT ${e%% *} $w "${e#* }"; done; mg "$W"
+  w=002-link-report; case "$e" in *'"3"'*) w=001-link-report ;; esac
+  printf '{"ts":"2026-11-20T10:00:00Z","type":"%s","work":"%s","actor":"t","data":%s}\n' "${e%% *}" "$w" "${e#* }" >> "$W/events.jsonl"; done; mg "$W"   # old logs hold these; event.sh now refuses them
 check "review stage as the UI reads it: an unstated PR superseded by a later merged one, a closed one alone" 'grep -q "\"review.002-link-report\": \"merged\"" "$W/state/link-report.json" && grep -q "\"review.001-link-report\": \"closed\"" "$W/state/link-report.json"'
 rm -rf "$tmp"
 own="$(cd "$(git rev-parse --git-common-dir)/.." && pwd)/.factree"
