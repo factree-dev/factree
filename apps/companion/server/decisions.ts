@@ -185,6 +185,22 @@ function setFrontMatter(path: string, fields: Record<string, string>) {
   writeFileSync(path, lines.join("\n"));
 }
 
+/** The front matter value of a key, or "" when it is missing or empty. */
+function frontValue(path: string, key: string): string {
+  const lines = readFileSync(path, "utf8").split("\n");
+  if (lines[0] !== "---") return "";
+  const end = lines.indexOf("---", 1);
+  for (let i = 1; i < end; i++) { const m = new RegExp(`^${key}:[ ]*(.*)$`).exec(lines[i]!); if (m) return m[1]!.trim(); }
+  return "";
+}
+
+/** Set only the fields still missing, so a retry after a failed write completes the rest and changes nothing else. */
+function setMissing(path: string, fields: Record<string, string>): boolean {
+  const need = Object.fromEntries(Object.entries(fields).filter(([k]) => !frontValue(path, k)));
+  if (Object.keys(need).length) setFrontMatter(path, need);
+  return Object.keys(need).length > 0;
+}
+
 export class DecisionError extends Error { constructor(public status: number, message: string) { super(message); } }
 
 /** Check a request may write at all (R10): POST, from this machine's companion page, with its header. */
@@ -213,28 +229,36 @@ export function applyDecision(root: string, user: string, body: unknown, cards: 
     case "approve-spec": {
       const spec = slug("spec");
       const card = cards.find((c) => c.kind === "spec" && c.spec === spec);
-      if (!card) throw new DecisionError(409, `${spec} isn't waiting for approval`);
-      if (!card.approvable) throw new DecisionError(409, card.blockedReason ?? "Not approvable here");
-      stateMove(root, spec, "approve", [`by=${by}`, "via=companion"]);   // sets status and logs spec.approved
-      setFrontMatter(join(root, "specs", `${spec}.md`), { approved_by: `${by} (via companion)`, approved_at: today });
+      const file = join(root, "specs", `${spec}.md`);
+      // Approved already but its approval fields missing: a retry after a failed write, which completes them.
+      const retry = !card && existsSync(file) && frontValue(file, "status") === "approved" && !frontValue(file, "approved_by");
+      if (!card && !retry) throw new DecisionError(409, `${spec} isn't waiting for approval`);
+      if (card && !card.approvable) throw new DecisionError(409, card.blockedReason ?? "Not approvable here");
+      stateMove(root, spec, "approve", [`by=${by}`, "via=companion"]);   // sets status and logs spec.approved; already approved is fine
+      const fields = { approved_by: `${by} (via companion)`, approved_at: today };
+      if (card) setFrontMatter(file, fields); else setMissing(file, fields);   // a fresh approval replaces an older one's names
       return;
     }
     case "approve-plan": {
       const work = slug("work");
       const card = cards.find((c) => c.kind === "plan" && c.work === work);
-      if (!card) throw new DecisionError(409, `${work} isn't waiting for approval`);
-      if (!card.approvable) throw new DecisionError(409, card.blockedReason ?? "Not approvable here");
       const dir = join(root, "work", work);
-      if (!existsSync(join(dir, "plan.md"))) throw new DecisionError(409, "Only plans split by vertical can be approved here");
+      const head = join(dir, "plan.md");
+      // A plan approved already has no card; answering it again is fine and fills in what a failed write left out.
+      const done = !card && existsSync(head) && frontValue(head, "status") === "approved";
+      if (!card && !done) throw new DecisionError(409, `${work} isn't waiting for approval`);
+      if (card && !card.approvable) throw new DecisionError(409, card.blockedReason ?? "Not approvable here");
+      if (!existsSync(head)) throw new DecisionError(409, "Only plans split by vertical can be approved here");
       const name = `${by} (via companion)`;
-      const tasks = Number(card.why.match(/^(\d+) tasks/)?.[1] ?? 0);
-      stateMove(root, card.spec, "plan-approve", [`work=${work}`, `by=${by}`, "via=companion", `tasks=${tasks}`]);   // sets status, logs plan.approved
+      const tasks = Number(card?.why.match(/^(\d+) tasks/)?.[1] ?? 0);
+      stateMove(root, card?.spec ?? frontValue(head, "spec"), "plan-approve", [`work=${work}`, `by=${by}`, "via=companion", `tasks=${tasks}`]);   // sets status, logs plan.approved
       for (const v of readdirSync(dir)) {
         const d = join(dir, v, "design.md");
         if (existsSync(d)) writeFileSync(d, readFileSync(d, "utf8").replace(/Approved: <pending>/g, `Approved: ${name}, ${today}`));
       }
-      setFrontMatter(join(dir, "plan.md"), { design_approved_by: name, design_approved_at: today, approved_by: name, approved_at: today });
-      logEvent(root, "plan.design_approved", work, { ...via, new_patterns: (card.newPatterns ?? []).map((p) => p.id) });
+      const fields = { design_approved_by: name, design_approved_at: today, approved_by: name, approved_at: today };
+      if (card) setFrontMatter(head, fields);
+      if (card || setMissing(head, fields)) logEvent(root, "plan.design_approved", work, { ...via, new_patterns: (card?.newPatterns ?? []).map((p) => p.id) });
       return;
     }
     case "feedback": {

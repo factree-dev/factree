@@ -110,16 +110,45 @@ describe("deciding in the companion", () => {
     expect(log().at(-1).data).toMatchObject({ move: "approve", by: "John Doe", via: "companion" });
   });
 
+  const design = "## Patterns\n\n### Reused\n- **P1 X:** `a.ts:1`. Fits.\n\n### New\nNone.\n";
+
   it("a refused move returns 409 with the script's message [status-state#R7.S1]", () => {
-    spec("version-check", "draft");
+    spec("version-check", "approved");
+    plan("015-build", "version-check", design);
     events([]);
-    decide({ kind: "approve-spec", spec: "version-check" });
-    expect(() => decide({ kind: "approve-plan", work: "015-none" })).toThrow("isn't waiting");
-    plan("015-build", "version-check", "## Patterns\n\n### Reused\n- **P1 X:** `a.ts:1`. Fits.\n\n### New\nNone.\n");   // never run through state.sh plan
+    mkdirSync(join(root, "state"), { recursive: true });
+    writeFileSync(join(root, "state", "version-check.json"), "{\n  not json\n}\n");   // a state file state.sh can't read refuses every move
     const err = (() => { try { decide({ kind: "approve-plan", work: "015-build" }); } catch (e) { return e as { status: number; message: string }; } })();
     expect(err).toMatchObject({ status: 409 });
-    expect(err!.message).toMatch(/can't be approved/);
-    expect(readFileSync(join(root, "work", "015-build", "plan.md"), "utf8")).toMatch(/^status: draft$/m);
+    expect(err!.message).toMatch(/not readable/);
+    expect(readFileSync(join(root, "work", "015-build", "plan.md"), "utf8")).not.toMatch(/^status: approved$/m);
+  });
+
+  it("approving a plan on an un-migrated workspace succeeds and state reads approved [status-state#R7.S1]", () => {
+    spec("version-check", "approved");
+    plan("015-build", "version-check", design);
+    events([]);
+    decide({ kind: "approve-plan", work: "015-build" });   // no state/ before this
+    expect(state("version-check", "show")).toMatch(/"plan.015-build": "approved"/);
+    expect(readFileSync(join(root, "work", "015-build", "plan.md"), "utf8")).toMatch(/^status: approved$/m);
+  });
+
+  it("a plan already approved answers again and changes nothing; a retry fills in what a failed write missed [status-state#R7.S1]", () => {
+    spec("version-check", "approved");
+    plan("015-build", "version-check", design);
+    events([]);
+    decide({ kind: "approve-plan", work: "015-build" });
+    const planFile = join(root, "work", "015-build", "plan.md");
+    const before = readFileSync(planFile, "utf8");
+    const n = log().length;
+    decide({ kind: "approve-plan", work: "015-build" });
+    expect(readFileSync(planFile, "utf8")).toBe(before);
+    expect(log().filter((e) => e.type === "plan.design_approved")).toHaveLength(1);
+    expect(log().length).toBeGreaterThanOrEqual(n);
+    writeFileSync(planFile, before.replace(/^(design_)?approved_(by|at):.*\n/gm, ""));   // the file writes failed after the move
+    decide({ kind: "approve-plan", work: "015-build" });
+    expect(readFileSync(planFile, "utf8")).toMatch(/^approved_by: John Doe \(via companion\)$/m);
+    expect(readFileSync(planFile, "utf8")).toMatch(/^status: approved$/m);
   });
 
   it("a change request on an approved spec moves it back to writing [status-state#R7.S1]", () => {
