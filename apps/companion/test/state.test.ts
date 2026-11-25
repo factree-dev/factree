@@ -13,7 +13,10 @@ const here = (p: string) => fileURLToPath(new URL(p, import.meta.url));
 const FIXTURE = here("../../../tests/fixtures/workspace");
 const STATE_SH = here("../../../plugins/factree/scripts/state.sh");
 // A snapshot of this repo's own workspace, when it is there (copied, never written to).
-const REAL = process.env.FACTREE_SNAPSHOT ?? "/Users/abhishek/Documents/work/factree-dev/factree/.factree";
+// Found as tests/run.sh finds it: the .factree beside the main checkout's .git, from any worktree.
+let gitDir = "";
+try { gitDir = execFileSync("git", ["rev-parse", "--path-format=absolute", "--git-common-dir"], { cwd: here("."), encoding: "utf8" }).trim(); } catch { /* not in git: skip */ }
+const REAL = process.env.FACTREE_SNAPSHOT ?? (gitDir ? join(gitDir, "..", ".factree") : "");
 const NOW = Date.now();
 const at = (min: number) => new Date(NOW - min * 60000).toISOString();
 
@@ -184,7 +187,7 @@ function compare(src: string, change: () => void = () => {}): string[] {
 describe("old and new readers agree [status-state#R6.S3]", () => {
   it("old and new readers agree on every spec of the migrated fixture and repo snapshot except releases and build-status [status-state#R6.S3]", () => {
     expect(compare(FIXTURE)).toEqual([]);
-    if (!existsSync(join(REAL, "specs"))) return;
+    if (!REAL || !existsSync(join(REAL, "specs"))) return;
     const diff = compare(REAL);
     if (diff.length) console.log(diff.join("\n"));
     expect(diff.filter((d) => !/^(releases|build-status):/.test(d))).toEqual([]);
