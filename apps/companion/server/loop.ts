@@ -10,6 +10,7 @@ import { readText, isDir } from "./read.ts";
 import { sessionsFor } from "./live.ts";
 import { VERIFY_ON } from "../src/features.ts";
 import { PAUSED_AFTER_MS } from "../shared/config.ts";
+import type { SpecState, WorkState } from "./state.ts";
 
 /** The latest spec.verified event for a spec, as counts or with every scenario's result (verify R4). */
 export function latestVerify(id: string, events: FactreeEvent[], withResults: true): VerifyResult | null;
@@ -38,13 +39,27 @@ export function isStale(plan: Plan, events: FactreeEvent[], spec: Spec | undefin
   return Boolean(spec?.updated && plan.specUpdated && spec.updated > plan.specUpdated);
 }
 
-export function brief(plans: Plan[], events: FactreeEvent[] = []): PlanBrief | null {
+/** The newest plan in brief. With a state that records it, its stage, counts, review and hold are the state's
+ *  (status-state R5); task details and comments still come from events. */
+export function brief(plans: Plan[], events: FactreeEvent[] = [], st: SpecState | null = null): PlanBrief | null {
   const p = plans[0];
   if (!p) return null;
   const builds = Object.values(p.build);
-  return { work: p.work, status: p.status, approvedAt: p.approvedAt, others: plans.length - 1,
-    tasks: builds.length, done: builds.filter((b) => b.status === "done").length, implemented: Boolean(p.implementedAt),
-    review: reviewOf(p.work, events), ...(p.branchReview ? { branchReview: p.branchReview } : {}), ...holdFor(p.work, events) };
+  const w = st?.works[p.work];
+  const base = { work: p.work, approvedAt: p.approvedAt, others: plans.length - 1, ...(p.branchReview ? { branchReview: p.branchReview } : {}) };
+  if (w) return { ...base, status: w.stage !== "planned" ? "approved" : p.status === "approved" ? "draft" : p.status,
+    tasks: w.total || builds.length, done: w.done, implemented: w.stage === "implemented", review: stateReview(reviewOf(p.work, events), w),
+    ...(w.hold ? { hold: w.hold } : {}) };
+  return { ...base, status: p.status, tasks: builds.length, done: builds.filter((b) => b.status === "done").length, implemented: Boolean(p.implementedAt),
+    review: reviewOf(p.work, events), ...holdFor(p.work, events) };
+}
+
+/** The review as the state records it: none, merged or closed say so; open keeps the newest pull request's own state
+ *  unless that one says merged or closed. */
+function stateReview(r: ReviewInfo | null, w: WorkState): ReviewInfo | null {
+  if (w.review === "none") return null;
+  const state = w.review === "merged" ? "MERGED" : w.review === "closed" ? "CLOSED" : r && r.state !== "MERGED" && r.state !== "CLOSED" ? r.state : "OPEN";
+  return { ...(r ?? { url: "", comments: [] }), state };
 }
 
 /** The work's current hold (build-status R4, D3): the last stage.held, cleared by a stage.released for that stage;
@@ -100,7 +115,7 @@ function reviewOf(work: string, events: FactreeEvent[]): ReviewInfo | null {
 /** Stale stages and the round (spec-ring R4). A stage after Spec is stale when it last finished before the latest spec
  *  change and hasn't finished since. A spec change starts a new round only once the work went out for review since
  *  the round began; each request for changes is a round too. */
-export function loopOf(id: string, works: Set<string>, events: FactreeEvent[], verifyOn: boolean = VERIFY_ON): LoopState {
+export function loopOf(id: string, works: Set<string>, events: FactreeEvent[], verifyOn: boolean = VERIFY_ON, st: SpecState | null = null): LoopState {
   const finished: Record<string, string> = {};
   let round = 1, reviewed = false, updated: string | null = null;
   for (const e of events) {
@@ -116,6 +131,13 @@ export function loopOf(id: string, works: Set<string>, events: FactreeEvent[], v
   }
   // Staleness carries forward: once a stage is stale, every later stage that had finished is stale too, so the ring
   // never shows a gap (spec-ring R4.S5). An open pull request is fresh again once Verify is; a merged one is not.
+  // With a state, the newest plan's stages are stale while what it covers changed (status-state R4); the stages
+  // after it only once they had finished.
+  const w = st?.works[st.plan];
+  if (w) {
+    const s = w.stale;
+    return { stale: [false, s, s && w.stage === "implemented", ...(verifyOn ? [s && Boolean(finished.verify)] : []), s && w.review !== "none"], round };
+  }
   const before = (k: string) => Boolean(updated && finished[k] && finished[k]! < updated);
   const stale = [false];
   let carry = false;
@@ -211,7 +233,7 @@ export function branchReviewOf(work: string, events: FactreeEvent[], now: number
 }
 
 /** Every plan in `work/`, newest (highest number) first. A folder with no plan, design or task file isn't a plan (plan-view R11.S3). */
-export function readPlans(root: string, events: FactreeEvent[] = [], specs: Map<string, Spec> = new Map(), live: Session[] = []): Plan[] {
+export function readPlans(root: string, events: FactreeEvent[] = [], specs: Map<string, Spec> = new Map(), live: Session[] = [], states: Map<string, SpecState | null> = new Map()): Plan[] {
   const dir = join(root, "work");
   if (!existsSync(dir)) return [];
   const out: Plan[] = [];
@@ -231,7 +253,7 @@ export function readPlans(root: string, events: FactreeEvent[] = [], specs: Map<
       files = { verticals: { general: { design, tasks } } };
     }
     const p = parsePlan(work, files);
-    p.stale = isStale(p, events, specs.get(p.spec));
+    p.stale = states.get(p.spec)?.works[work]?.stale ?? isStale(p, events, specs.get(p.spec));
     p.sessions = sessionsFor(events, (e) => e.work === work, live);
     p.build = buildStatus(p, events);
     p.branchReview = branchReviewOf(work, events);
