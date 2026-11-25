@@ -24,7 +24,7 @@ root=$(bash "$here/root.sh")
 dir="$root/state"
 
 # A front-matter value, and the status value.
-fm() { awk -v K="$2" 'NR == 1 && $0 == "---" { fm = 1; next } fm && $0 == "---" { exit }
+fm() { awk -v K="$2" '{ sub(/\r$/, "") } NR == 1 && $0 == "---" { fm = 1; next } fm && $0 == "---" { exit }
   fm && index($0, K ":") == 1 { sub(/^[^:]*:[ ]*/, ""); sub(/[ ]+#.*/, ""); print; exit }' "$1"; }
 status_of() { v=$(fm "$1" status); printf '%s\n' "${v%%[ #]*}"; }
 
@@ -34,7 +34,8 @@ covers() {
   h="$root/work/$1/plan.md"; [ -f "$h" ] || h="$root/work/$1/tasks.md"
   [ -f "$h" ] || return 0
   awk -v SCOPE=" $(fm "$h" scope | tr -d '[],') " '
-    function flush() { if (id != "" && index(SCOPE, " " id " ") && !(id in gone)) { gsub(/[ \t]+/, " ", txt); sub(/^ /, "", txt); sub(/ $/, "", txt); print id "\t" txt }; id = ""; txt = "" }
+    function flush() { if (id != "" && index(SCOPE, " " id " ") && !(id in gone)) { gsub(/[ \t\r]+/, " ", txt); sub(/^ /, "", txt); sub(/ $/, "", txt); print id "\t" txt }; id = ""; txt = "" }
+    { sub(/\r$/, "") }
     NR == 1 && $0 == "---" { fm = 1; next }
     fm && $0 == "---" { fm = 0; next }
     fm { if (/^retired:/) { gsub(/[][,]/, " "); n = split($0, a, " "); for (i = 2; i <= n; i++) gone[a[i]] = 1 } next }
@@ -53,12 +54,12 @@ seed() { (
   [ $# -gt 0 ] && awk -v ONLY="$only" -f "$here/state-seed.awk" "$@"
 ) }
 # seeded <seed file>: "key\tvalue" for what $spec's state ($src) lacks: spec, plan and seq when it has none, and every
-# plan's keys when it lacks that plan, with the covers taken now for a plan that isn't stale today.
+# plan's keys when it lacks that plan (but $skip), with the covers taken now for a plan that isn't stale today.
 seeded() {
   awk -F'\t' -v S="$spec" '$1 == S { print $2 "\t" $3 }' "$1" |
-  awk -F'\t' 'FILENAME == ARGV[1] { if (match($0, /^  "[^"]*"/)) have[substr($0, 4, RLENGTH - 4)] = 1; next }
+  awk -F'\t' -v X="$skip" 'FILENAME == ARGV[1] { if (match($0, /^  "[^"]*"/)) have[substr($0, 4, RLENGTH - 4)] = 1; next }
     { w = ($1 == "snap") ? $2 : $1; sub(/^[a-z_]+\./, "", w); sub(/\..*/, "", w)
-      if ((w == $1) ? !($1 in have) : !(("plan." w) in have)) print }' "$src" - |
+      if (w != X && ((w == $1) ? !($1 in have) : !(("plan." w) in have))) print }' "$src" - |
   while IFS="$tab" read -r k v; do if [ "$k" = snap ]; then covers "$v"; else printf '%s\t%s\n' "$k" "$v"; fi; done
 }
 
@@ -113,9 +114,9 @@ if [ "$spec" = migrate ]; then
     [ -f "$specf" ] || continue
     spec="${specf##*/}"; spec="${spec%.md}"
     case "$spec" in *[!A-Za-z0-9_.-]*|.*) continue ;; esac
+    lock_spec   # before reading: a move may create or change the state meanwhile
     file="$dir/$spec.json"; src="$file"; [ -f "$src" ] || src=/dev/null
-    if grep -Evq '^([{}]|  "[^"]*": "[^"]*",?)$' "$src"; then echo "state/$spec.json is not readable; left alone" >&2; continue; fi
-    lock_spec
+    if grep -Evq '^([{}]|  "[^"]*": "[^"]*",?)$' "$src"; then echo "state/$spec.json is not readable; left alone" >&2; unlock; continue; fi
     { awk -F'"' 'NF >= 5 { print $2 "\t" $4 }' "$src"; seeded "$sd"; } | write_state "$file" && n=$((n + 1))
     unlock
   done
@@ -131,8 +132,13 @@ if [ "$move" = show ]; then
 fi
 if [ "$move" = stale ]; then
   [ -f "$file" ] && [ -f "$specf" ] || exit 0
+  # Stale: a covered requirement's sum differs, or one is retired or missing; once its review is merged, only a
+  # covered requirement still in the spec that changed counts (D6). cover.<work>.stale matches no current sum.
   for w in $(awk -F'"' '$2 ~ /^plan\./ && ($4 == "approved" || $4 == "building" || $4 == "implemented") { print substr($2, 6) }' "$file"); do
-    [ "$(awk -F'"' -v P="cover.$w." 'index($2, P) == 1 { print $2 "\t" $4 }' "$file")" = "$(covers "$w" | sort)" ] || echo "$w"
+    covers "$w" | awk -F'\t' -v P="cover.$w." -v R="review.$w" 'FILENAME == ARGV[1] { split($0, q, "\"")
+        if (index(q[2], P) == 1) { s[q[2]] = q[4]; n++ } else if (q[2] == R) m = (q[4] == "merged"); next }
+      { if (!($1 in s) || s[$1] != $2) bad = 1; else hit++ }
+      END { exit !(bad || (!m && hit != n)) }' "$file" - && echo "$w"
   done
   exit 0
 fi
@@ -174,10 +180,24 @@ set_status() {
 
 lock_spec
 
-# The state as it stands, plus what it lacks seeded from files and events (as migrate would).
+# The state as it stands, plus what it lacks seeded from files and events (as migrate would): only when there is no
+# state, or a plan of this spec on disk (plan.md, or the old single tasks.md) has no entry. The plan a plan move
+# names is never seeded: that move records it.
 src="$file"; [ -f "$src" ] || src=/dev/null
-sd="$dir/.seed-$spec.$$"; only="$spec"; seed > "$sd"
-add=$(seeded "$sd" | awk -F'\t' '{ print "  \"" $1 "\": \"" $2 "\"" }'); rm -f "$sd"
+skip=""; [ "$move" = plan ] && skip="$work"
+need=$([ -f "$file" ] || echo 1)
+if [ -z "$need" ]; then
+  for h in $(grep -lx "spec: $spec" "$root"/work/*/plan.md "$root"/work/*/tasks.md 2>/dev/null); do
+    w="${h%/*}"; w="${w##*/}"
+    [ "${h##*/}" = tasks.md ] && [ -f "${h%/*}/plan.md" ] && continue
+    [ "$w" = "$skip" ] || grep -qF "  \"plan.$w\":" "$file" || { need=1; break; }
+  done
+fi
+add=""
+if [ -n "$need" ]; then
+  sd="$dir/.seed-$spec.$$"; only="$spec"; seed > "$sd"
+  add=$(seeded "$sd" | awk -F'\t' '{ print "  \"" $1 "\": \"" $2 "\"" }'); rm -f "$sd"
+fi
 state() { cat "$src"; [ -z "$add" ] || printf '%s\n' "$add"; }
 
 # The plan's task count, from its tasks files in either layout.

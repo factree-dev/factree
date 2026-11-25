@@ -33,7 +33,10 @@ kind == "work" { if (tasks && /^### T[0-9]+:/) { t = $2; sub(/:$/, "", t); if (!
   else if (type == "plan.implemented") pimpl[e] = ts
   else if (type == "task.started") pstarted[e] = 1
   else if (type == "task.done") { t = clean(jval(d, "task")); if (t != "" && !((e, t) in tdone)) { tdone[e, t] = 1; dlist[e] = dlist[e] (dlist[e] == "" ? "" : " ") t } }
-  else if (type == "review.opened" && pr != "" && !((e, pr) in prst)) { prst[e, pr] = "OPEN"; prs[e] = prs[e] (prs[e] == "" ? "" : " ") pr }
+  else if (type == "review.opened" && pr != "") {   # a pull request opened again moves to the end, as the UI orders them
+    if (!((e, pr) in prst)) prst[e, pr] = ""; x = " " prs[e] " "; sub(" " pr " ", " ", x); gsub(/^ +| +$/, "", x)
+    prs[e] = x (x == "" ? "" : " ") pr
+  }
   else if (type == "review.state" && ((e, pr) in prst)) prst[e, pr] = jval(d, "state")
   else if (type == "stage.held") { hs[e] = clean(jval(d, "stage")); hold[e] = hs[e] " " clean(jval(d, "reason")); hsince[e] = ts }
   else if (type == "stage.released" && (e in hs) && clean(jval(d, "stage")) == hs[e]) { delete hs[e]; delete hold[e]; delete hsince[e] }
@@ -51,11 +54,12 @@ END {
     print s "\tplan." w "\t" stage
     if (dlist[w] != "") print s "\ttasks." w "\t" dlist[w]
     if (total[w] > 0) print s "\ttotal." w "\t" total[w]
-    if (prs[w] != "") {
-      k = split(prs[w], p, " "); open = 0; merged = 0; closed = 0
-      for (i = 1; i <= k; i++) { x = prst[w, p[i]]; if (x == "MERGED") merged++; else if (x == "CLOSED") closed++; else open++ }
+    if (prs[w] != "") {   # as the UI reads it (loop.ts reviewOf): each one's newest state, or open; one with no
+      # state is superseded once a later one merged
+      k = split(prs[w], p, " "); open = 0; merged = 0; closed = 0; later = 0
+      for (i = k; i >= 1; i--) { x = prst[w, p[i]]; if (x == "MERGED") { merged++; later = 1 } else if (x == "CLOSED") closed++; else if (x != "" || !later) open++ }
       print s "\tprs." w "\t" prs[w]
-      print s "\treview." w "\t" (merged == k ? "merged" : (closed && !open) ? "closed" : "open")
+      print s "\treview." w "\t" ((merged && !open && !closed) ? "merged" : (closed && !open) ? "closed" : "open")
     }
     if (w in hold) { print s "\thold." w "\t" hold[w]; print s "\thold_since." w "\t" hsince[w] }
     if (stage == "planned") continue
