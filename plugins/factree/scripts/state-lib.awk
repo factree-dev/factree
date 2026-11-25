@@ -14,6 +14,11 @@
 function say(kind, msg) { if (!said) print kind " " msg; said = 1 }
 function refuse(what, verb, why) { say("refuse", what " can't be " verb ": " why) }
 function inlist(list, x) { return index(" " list " ", " " x " ") > 0 }
+function without(list, x,   parts, n, i, o) {
+  n = split(list, parts, " "); o = ""
+  for (i = 1; i <= n; i++) if (parts[i] != x) o = (o == "" ? "" : o " ") parts[i]
+  return o
+}
 function count(list,   parts) { return list == "" ? 0 : split(list, parts, " ") }
 # The plan's covers: the same as COVER, or replaced by it (a re-approval: status-state R4.S2).
 function samecovers(   k, n, i, e, j, c) {
@@ -55,8 +60,14 @@ END {
     else if (p != "planned") refuse(W, "approved", "it is " pis)
     else { V["plan." W] = "approved"; setcovers() }
   } else if (MOVE == "build-start") {
-    if (p == "building" || p == "implemented") say("already", W " is already " p)
-    else if (p != "approved") refuse(W, "started", "it is " pis)
+    if (TASK != "" && p == "building") started = (("started." W) in V) ? V["started." W] : ""
+    if (p == "implemented" || (p == "building" && (TASK == "" || inlist(started, TASK)))) say("already", W " is already " p)
+    else if (p != "approved" && p != "building") refuse(W, "started", "it is " pis)
+    else if (TASK != "") {   # per task: the first moves the plan to building; each is logged as started once
+      started = (("started." W) in V) ? V["started." W] : ""
+      if (inlist(started, TASK)) say("already", TASK " is already started in " W)
+      else { V["plan." W] = "building"; V["started." W] = (started == "") ? TASK : started " " TASK }
+    }
     else V["plan." W] = "building"
   } else if (MOVE == "task-done") {
     done = (("tasks." W) in V) ? V["tasks." W] : ""
@@ -78,7 +89,20 @@ END {
     else if (r == "merged") refuse(W, "reviewed", "its review is merged")
     else { V["review." W] = "open"; V["prs." W] = (prs == "") ? PR : prs " " PR }
   } else if (MOVE == "merged" || MOVE == "closed") {
-    if (r == MOVE) say("already", W "'s review is already " MOVE)
+    prs = (("prs." W) in V) ? V["prs." W] : ""
+    ml = (("merged." W) in V) ? V["merged." W] : ""; cl = (("closed." W) in V) ? V["closed." W] : ""
+    if (PR != "") {   # per pull request (D4): merged when all are, closed when one is and none is open
+      if (!inlist(prs, PR)) refuse("pull request " PR, MOVE, W " has no such pull request")
+      else if (inlist(MOVE == "merged" ? ml : cl, PR)) say("already", "pull request " PR " is already " MOVE)
+      else {
+        if (MOVE == "merged") { ml = (ml == "" ? PR : ml " " PR); cl = without(cl, PR) } else { cl = (cl == "" ? PR : cl " " PR); ml = without(ml, PR) }
+        if (ml == "") delete V["merged." W]; else V["merged." W] = ml
+        if (cl == "") delete V["closed." W]; else V["closed." W] = cl
+        open = count(prs) - count(ml) - count(cl)
+        V["review." W] = (open == 0 && count(ml) == count(prs)) ? "merged" : (open <= 0 && cl != "") ? "closed" : "open"
+      }
+    }
+    else if (r == MOVE) say("already", W "'s review is already " MOVE)
     else if (r != "open") refuse(W "'s review", MOVE, "it is " r)
     else V["review." W] = MOVE
   } else if (MOVE == "hold") {

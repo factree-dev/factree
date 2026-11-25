@@ -90,7 +90,7 @@ Show every link.
 ### 4. Follow the review (review R3)
 
 Start one `bash <plugin>/scripts/wait-review.sh <work> <repo> <pr>` per pull request with `run_in_background`, then end your turn. Each checks its pull request, in its repo, every 5 minutes, logs each new comment (`review.comment`) and each change of state (`review.state`), and exits when there's something new, which wakes this session. Keep one wait per pull request. When one ends:
-- **Merged or closed:** say so. Run `state.sh <spec-id> merged work=<work-id> pr=<n>` (or `closed`). Don't start another wait for it. If an open pull request is stacked on it, go to step 8. Review is done when every pull request is.
+- **Merged or closed:** say so. Run `state.sh <spec-id> merged work=<work-id> pr=<n>` (or `closed`; per pull request, the review is merged when all are, and the follower has usually recorded it already, so a repeat says so). Don't start another wait for it. If an open pull request is stacked on it, go to step 8. Review is done when every pull request is.
 - **Approved:** say it's ready for the reviewers or the user to merge. Never merge it yourself.
 - **Comments:** go on to step 5.
 - **CONFLICTING:** the pull request no longer merges cleanly with its base, usually because something else merged first. Go to step 7.

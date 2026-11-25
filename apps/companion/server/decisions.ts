@@ -234,9 +234,9 @@ export function applyDecision(root: string, user: string, body: unknown, cards: 
       const done = !card && existsSync(file) && frontValue(file, "status") === "approved";
       if (!card && !done) throw new DecisionError(409, `${spec} isn't waiting for approval`);
       if (card && !card.approvable) throw new DecisionError(409, card.blockedReason ?? "Not approvable here");
-      stateMove(root, spec, "approve", [`by=${by}`, "via=companion"]);   // sets status and logs spec.approved; already approved is fine
-      const fields = { approved_by: `${by} (via companion)`, approved_at: today };
-      if (card) setFrontMatter(file, fields); else setMissing(file, fields);   // a fresh approval replaces an older one's names
+      // Sets status, approved_by and approved_at (a fresh approval replaces an older one's names, an already approved one
+      // only fills what is missing) and logs spec.approved.
+      stateMove(root, spec, "approve", [`by=${by}`, "via=companion", `at=${today}`]);
       return;
     }
     case "approve-plan": {
@@ -251,12 +251,12 @@ export function applyDecision(root: string, user: string, body: unknown, cards: 
       if (!existsSync(head)) throw new DecisionError(409, "Only plans split by vertical can be approved here");
       const name = `${by} (via companion)`;
       const tasks = Number(card?.why.match(/^(\d+) tasks/)?.[1] ?? 0);
-      stateMove(root, card?.spec ?? frontValue(head, "spec"), "plan-approve", [`work=${work}`, `by=${by}`, "via=companion", `tasks=${tasks}`]);   // sets status, logs plan.approved
+      stateMove(root, card?.spec ?? frontValue(head, "spec"), "plan-approve", [`work=${work}`, `by=${by}`, "via=companion", `at=${today}`, `tasks=${tasks}`]);   // sets status, logs plan.approved
       for (const v of readdirSync(dir)) {
         const d = join(dir, v, "design.md");
         if (existsSync(d)) writeFileSync(d, readFileSync(d, "utf8").replace(/Approved: <pending>/g, `Approved: ${name}, ${today}`));
       }
-      const fields = { design_approved_by: name, design_approved_at: today, approved_by: name, approved_at: today };
+      const fields = { design_approved_by: name, design_approved_at: today };   // approved_by/at: state.sh, above
       if (card) setFrontMatter(head, fields);
       if (card || setMissing(head, fields)) logEvent(root, "plan.design_approved", work, { ...via, new_patterns: (card?.newPatterns ?? []).map((p) => p.id) });
       return;

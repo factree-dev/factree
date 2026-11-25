@@ -81,6 +81,13 @@ EOF
     fi
   elif [ "$now" != "$last" ]; then
     bash "$here/event.sh" review.state "$work" "{\"pr\":\"$pr\",\"state\":\"$now\"$rjson}" || exit 1
+    # A merge or close is recorded in the spec's state too, per pull request (status-state D4); review-catchup.sh
+    # runs this script, so it records them as well. A refusal (no state, or the pull request not recorded) is left be.
+    case "$now" in MERGED|CLOSED)
+      ph="$root/work/$work/plan.md"; [ -f "$ph" ] || ph="$root/work/$work/tasks.md"
+      sp=$(sed -n '1,/^---$/{s/^spec:[ ]*//p;}' "$ph" 2>/dev/null | head -n1 | tr -d '\r')
+      [ -n "$sp" ] && bash "$here/state.sh" "$sp" "$(echo "$now" | tr 'A-Z' 'a-z')" "work=$work" "pr=$pr" >/dev/null 2>&1 ;;
+    esac
     echo "review: $now"; found=1
   fi
   [ "$found" = 1 ] && exit 0

@@ -927,6 +927,43 @@ if [ -d "$own/specs" ]; then
   check "migrate twice changes nothing [status-state#R6.S2]" '[ "$before" = "$(cksum "$W/state"/*.json "$W/events.jsonl" "$W/specs"/*.md)" ]'
   rm -rf "$tmp"
 else echo "skip migrate on this repo's workspace: none at $own"; fi
+# Per pull request, approval fields, per-task starts, and the followers (whole-branch review fixes).
+sw; st link-report write >/dev/null; st link-report approve by="flow: no open decisions" >/dev/null
+check "approve fills approved_by and approved_at, and the spec validates [status-state#R2.S1]" 'grep -q "^approved_by: flow: no open decisions$" "$W/specs/link-report.md" && grep -q "^approved_at: $(date -u +%Y-%m-%d)$" "$W/specs/link-report.md" && bash $P/skills/spec/scripts/validate.sh "$W/specs/link-report.md" 2>&1 | grep -q " 0 error(s)"'
+sed -i.bak 's/^approved_by:.*/approved_by: Someone/' "$W/specs/link-report.md"; rm -f "$W/specs/link-report.md.bak"; st link-report approve by=other >/dev/null
+check "an already answer leaves a filled approval alone [status-state#R2.S3]" 'grep -q "^approved_by: Someone$" "$W/specs/link-report.md"'
+st link-report plan work=002-link-report >/dev/null; st link-report plan-approve work=002-link-report by="the flow" >/dev/null
+check "plan-approve fills the plan's approved_by and approved_at [status-state#R2.S1]" 'grep -q "^approved_by: the flow$" "$WK/plan.md" && grep -q "^approved_at: $(date -u +%Y-%m-%d)$" "$WK/plan.md"'
+st link-report build-start work=002-link-report task=T1 >/dev/null; out=$(st link-report build-start work=002-link-report task=T1); st link-report build-start work=002-link-report task=T2 >/dev/null
+check "build-start per task: the plan building, a task.started each, a repeat already [status-state#R3.S1]" 'grep -q "\"plan.002-link-report\": \"building\"" "$SF" && [ $(grep -c "\"type\":\"task.started\".*\"task\":\"T[12]\"" "$W/events.jsonl") -eq 2 ] && echo "$out" | grep -q "already"'
+for n in 1 2 3 4 5; do st link-report task-done work=002-link-report task=T$n >/dev/null; done
+st link-report implemented work=002-link-report >/dev/null
+st link-report review-open work=002-link-report pr=11 >/dev/null; st link-report review-open work=002-link-report pr=12 >/dev/null
+out=$(st link-report merged work=002-link-report pr=11)
+check "one merged pull request of two leaves the review open [status-state#R3.S3]" 'grep -q "\"review.002-link-report\": \"open\"" "$SF" && grep -q "\"type\":\"review.merged\".*\"pr\":\"11\"" "$W/events.jsonl"'
+out=$(st link-report merged work=002-link-report pr=11)
+check "a repeat for the same pull request is already [status-state#R3.S3]" 'echo "$out" | grep -q "already"'
+st link-report merged work=002-link-report pr=12 >/dev/null
+check "the last merged makes the review merged [status-state#R3.S3]" 'grep -q "\"review.002-link-report\": \"merged\"" "$SF"'
+rm -rf "$tmp"
+sw; st link-report write >/dev/null; st link-report approve >/dev/null; st link-report plan work=002-link-report >/dev/null; st link-report plan-approve work=002-link-report >/dev/null
+for n in 1 2 3 4 5; do st link-report task-done work=002-link-report task=T$n >/dev/null; done
+st link-report implemented work=002-link-report >/dev/null; st link-report review-open work=002-link-report pr=11 >/dev/null; st link-report review-open work=002-link-report pr=12 >/dev/null
+st link-report merged work=002-link-report pr=11 >/dev/null; st link-report closed work=002-link-report pr=12 >/dev/null
+check "one merged and one closed, none open: closed [status-state D4]" 'grep -q "\"review.002-link-report\": \"closed\"" "$SF"'
+rm -rf "$tmp"
+# The followers record a merge in the state.
+tmp=$(mktemp -d); W="$tmp/ws/.factree"; mkdir -p "$W/specs" "$W/work/002-link-report/backend" "$tmp/ws/repo" "$tmp/bin"; : > "$W/events.jsonl"; SF="$W/state/link-report.json"
+sed 's/^status: approved$/status: draft/' tests/fixtures/workspace/specs/link-report.md > "$W/specs/link-report.md"
+sed 's/^status: approved$/status: draft/' tests/fixtures/workspace/work/002-link-report/plan.md > "$W/work/002-link-report/plan.md"
+for n in 1 2; do printf '### T%s: task %s\n' $n $n; done > "$W/work/002-link-report/backend/tasks.md"
+printf '#!/usr/bin/env bash\n[ "$1 $2" = "pr view" ] && cat "$(dirname "$0")/state"; exit 0\n' > "$tmp/bin/gh"; chmod +x "$tmp/bin/gh"
+sf() { FACTREE_HOME="$W" bash "$ST" link-report "$@" >/dev/null 2>&1; }
+sf write; sf approve; sf plan work=002-link-report; sf plan-approve work=002-link-report; sf build-start work=002-link-report; sf task-done work=002-link-report task=T1; sf task-done work=002-link-report task=T2; sf implemented work=002-link-report; sf review-open work=002-link-report pr=11
+printf 'MERGED UNKNOWN \n' > "$tmp/bin/state"
+(cd "$tmp/ws/repo" && PATH="$tmp/bin:$PATH" FACTREE_HOME="$W" bash "$WR" 002-link-report 11 --once >/dev/null 2>&1)
+check "wait-review records a merge in the state [status-state#R3.S3]" 'grep -q "\"review.002-link-report\": \"merged\"" "$SF"'
+rm -rf "$tmp"
 check "state.sh stays under 300 lines" '[ $(wc -l < "$ST") -lt 300 ]'
 
 echo "# releases"
