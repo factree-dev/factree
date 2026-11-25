@@ -91,16 +91,17 @@ function liveFor(specId, spec, events, sessions, now = Date.now()) {
 	};
 }
 /** What the UI shows for a spec (spec-status R2–R5). With a recorded stage (status-state R5, D5), live activity only
-*  says whether a writing spec needs you, is being written or is paused; it never changes an approved one. */
+*  says whether a writing spec needs you, is being written or is paused; it never changes an approved or draft one. */
 function displayStatus(fileStatus, live, lastMoved, now, stage) {
 	if (stage === "approved") return fileStatus === "live" ? "live" : "approved";
+	if (stage && stage !== "writing") return "draft";
 	if (live.open || stage === "writing") {
 		const working = live.session?.state === "working";
 		if ((live.pendingQuestion || live.step === "approval" || live.session?.state === "waiting") && !working) return "needs_you";
 		if (lastMoved !== null && now - Date.parse(lastMoved) < 6e5 || working) return "writing";
 	}
 	if (stage === "writing") return "paused";
-	return stage ? "draft" : fileStatus ?? "draft";
+	return fileStatus ?? "draft";
 }
 var WRITING_STEP = {
 	gaps: "finding gaps",
@@ -1610,8 +1611,17 @@ function covers(root, work, specText) {
 	flush();
 	return out;
 }
-/** The spec's state, or null with no state file. An unreadable one is null too: the caller reads as before (design). */
+/** The spec's state, or null with no state file. One that can't be read, or records no spec stage, is null too: the
+*  caller reads that spec as before, and one state file never fails the UI (design). */
 function readState(root, id) {
+	try {
+		return parseState(root, id);
+	} catch (e) {
+		console.error(`state/${id}.json can't be read (${e.message}); reading ${id} from events`);
+		return null;
+	}
+}
+function parseState(root, id) {
 	const text = read(join(root, "state", `${id}.json`));
 	if (text === null) return null;
 	const kv = /* @__PURE__ */ new Map();
@@ -1623,6 +1633,10 @@ function readState(root, id) {
 			return null;
 		}
 		kv.set(m[1], m[2]);
+	}
+	if (!kv.has("spec")) {
+		console.error(`state/${id}.json records no spec stage; reading ${id} from events`);
+		return null;
 	}
 	const specText = read(join(root, "specs", `${id}.md`));
 	const works = {};
@@ -1660,7 +1674,7 @@ function readState(root, id) {
 		};
 	}
 	return {
-		spec: kv.get("spec") ?? "draft",
+		spec: kv.get("spec"),
 		plan: kv.get("plan") ?? "",
 		works
 	};

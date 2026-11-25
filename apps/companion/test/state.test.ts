@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { mkdtempSync, writeFileSync, readFileSync, cpSync, existsSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, chmodSync, readFileSync, cpSync, existsSync, rmSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -8,7 +8,6 @@ import { workspaceState } from "../server/workspace.ts";
 import { readState, cksum } from "../server/state.ts";
 import { progressOf } from "../src/progress.ts";
 import { activityText, STATUS_META } from "../src/status.ts";
-import type { WorkspaceState } from "../shared/types.ts";
 
 const here = (p: string) => fileURLToPath(new URL(p, import.meta.url));
 const FIXTURE = here("../../../tests/fixtures/workspace");
@@ -123,6 +122,34 @@ describe("the UI reads the state", () => {
     expect(summary().status).toBe("approved");
   });
 
+  it("a state with no spec stage, empty or {}, reads as today [status-state#R1.S2]", () => {
+    const today = JSON.stringify(summary());
+    for (const text of ["", "{}\n", "{\n  \"plan\": \"002-link-report\""]) {
+      mkdirSync(join(root, "state"), { recursive: true });
+      writeFileSync(statePath(), text);
+      expect(readState(root, "link-report")).toBeNull();
+      expect(JSON.stringify(summary())).toBe(today);
+    }
+  });
+
+  it("an unreadable state file reads as today", () => {
+    const today = JSON.stringify(summary());
+    sh("migrate");
+    chmodSync(statePath(), 0);
+    try {
+      expect(readState(root, "link-report")).toBeNull();
+      expect(JSON.stringify(summary())).toBe(today);
+    } finally { chmodSync(statePath(), 0o644); }
+  });
+
+  it("a recorded draft stays draft whatever runs [status-state#R5]", () => {
+    sh("migrate");
+    setState({ spec: "draft" });
+    log([{ ts: at(2), type: "spec.step", spec: "link-report", data: { step: "questions" } },
+      { ts: at(1), type: "question.asked", spec: "link-report", data: { n: 1, text: "Which teams?", why: "scope", proposal: "" } }]);
+    expect(summary().status).toBe("draft");
+  });
+
   it("a hold comes from the state", () => {
     sh("migrate");
     setState({ "hold.002-link-report": "review acceptance run", "hold_since.002-link-report": "2026-11-24T10:00:00Z" });
@@ -130,23 +157,25 @@ describe("the UI reads the state", () => {
   });
 });
 
-/** Each spec's spec, plan, build and review stage, done or not and stale or not, as the UI shows them. */
-function stages(ws: WorkspaceState): Map<string, string> {
+/** What a user sees of each spec: its status label, percentage, centre text, and each stage done, stale and its words. */
+function seen(): Map<string, string> {
   const out = new Map<string, string>();
-  for (const s of ws.specs) {
+  for (const s of workspaceState(root, "", NOW).specs) {
     const p = progressOf(s, null);
-    out.set(s.id, p.stages.filter((st) => ["spec", "plan", "build", "review"].includes(st.key))
-      .map((st) => `${st.key}:${st.state === "stale" ? "stale" : st.fill >= 1 ? "done" : "-"}`).join(" "));
+    out.set(s.id, [STATUS_META[s.status].label, `${p.pct}%`, p.centre, ...p.stages.map((st) =>
+      `${st.key}:${st.state === "stale" ? "stale" : st.fill >= 1 ? "done" : "-"}:${st.sub}`)].join(" | "));
   }
   return out;
 }
-function compare(src: string): string[] {
+/** Specs that read differently from the old reader once migrated; `change` alters the migrated workspace first. */
+function compare(src: string, change: () => void = () => {}): string[] {
   rmSync(root, { recursive: true, force: true });
   cpSync(src, root, { recursive: true });
   rmSync(join(root, "state"), { recursive: true, force: true });
-  const old = stages(workspaceState(root, "", NOW));
+  const old = seen();
   sh("migrate");
-  const now = stages(workspaceState(root, "", NOW));
+  change();
+  const now = seen();
   const diff: string[] = [];
   for (const [id, o] of old) if (now.get(id) !== o) diff.push(`${id}: ${o} → ${now.get(id)}`);
   return diff;
@@ -159,5 +188,9 @@ describe("old and new readers agree [status-state#R6.S3]", () => {
     const diff = compare(REAL);
     if (diff.length) console.log(diff.join("\n"));
     expect(diff.filter((d) => !/^(releases|build-status):/.test(d))).toEqual([]);
+  });
+
+  it("the comparison reports a spec whose state reads differently", () => {
+    expect(compare(FIXTURE, () => setState({ "tasks.002-link-report": "T1" }))).toEqual([expect.stringMatching(/^link-report: /)]);
   });
 });

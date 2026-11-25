@@ -60,8 +60,12 @@ function covers(root: string, work: string, specText: string): Map<string, strin
   return out;
 }
 
-/** The spec's state, or null with no state file. An unreadable one is null too: the caller reads as before (design). */
+/** The spec's state, or null with no state file. One that can't be read, or records no spec stage, is null too: the
+ *  caller reads that spec as before, and one state file never fails the UI (design). */
 export function readState(root: string, id: string): SpecState | null {
+  try { return parseState(root, id); } catch (e) { console.error(`state/${id}.json can't be read (${(e as Error).message}); reading ${id} from events`); return null; }
+}
+function parseState(root: string, id: string): SpecState | null {
   const text = read(join(root, "state", `${id}.json`));
   if (text === null) return null;
   const kv = new Map<string, string>();
@@ -71,6 +75,7 @@ export function readState(root: string, id: string): SpecState | null {
     if (!m) { console.error(`state/${id}.json is not readable; reading ${id} from events`); return null; }
     kv.set(m[1]!, m[2]!);
   }
+  if (!kv.has("spec")) { console.error(`state/${id}.json records no spec stage; reading ${id} from events`); return null; }
   const specText = read(join(root, "specs", `${id}.md`));
   const works: Record<string, WorkState> = {};
   for (const [k, stage] of kv) {
@@ -91,5 +96,5 @@ export function readState(root: string, id: string): SpecState | null {
     works[w] = { stage, done: list("tasks").length, total: Number(get("total") || 0), review, prs: list("prs"), stale,
       ...(held ? { hold: { stage: sp < 0 ? held : held.slice(0, sp), reason: sp < 0 ? "" : held.slice(sp + 1), since: get("hold_since") } } : {}) };
   }
-  return { spec: kv.get("spec") ?? "draft", plan: kv.get("plan") ?? "", works };
+  return { spec: kv.get("spec")!, plan: kv.get("plan") ?? "", works };
 }
