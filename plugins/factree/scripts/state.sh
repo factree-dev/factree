@@ -3,7 +3,9 @@
 # Usage: state.sh <spec-id> <move> [<field>=<value>…]     state.sh <spec-id> show|stale     state.sh migrate
 #   Spec moves:   write, approve [by=], edit
 #   Plan moves:   plan, plan-approve, build-start, task-done task=<T>, implemented     (each with work=<work>)
-#   Review moves: review-open pr=<n>, merged, closed                                  (work=<work>)
+#   Review moves: review-open pr=<n>, merged pr=<n>, closed pr=<n>                   (work=<work>; merged
+#   and closed per pull request: the review is merged when all are, closed when one is and none is open: D4)
+#   build-start may name task=<T>: the first moves the plan to building; each is logged as task.started once.
 #   Any stage:    hold stage=<stage> reason=<text>, release        (work= defaults to the spec's newest plan)
 # A move applies only from the stages the table in state-lib.awk allows, under the lock state/.lock-<spec>; the
 # state is written to a temp file and moved into place, then the spec's or plan's status: line is set and the
@@ -69,8 +71,8 @@ write_state() {
   t="$dir/.${1##*/}.$$"
   awk -F'\t' '{ k = $1; r = 50
       if (k == "spec") r = 0; else if (k == "plan") r = 1; else if (k == "seq") r = 99
-      else if (k ~ /^plan\./) r = 2; else if (k ~ /^tasks\./) r = 3; else if (k ~ /^total\./) r = 4; else if (k ~ /^cover\./) r = 5
-      else if (k ~ /^review\./) r = 6; else if (k ~ /^prs\./) r = 7; else if (k ~ /^hold\./) r = 8; else if (k ~ /^hold_since\./) r = 9
+      else if (k ~ /^plan\./) r = 2; else if (k ~ /^(tasks|started)\./) r = 3; else if (k ~ /^total\./) r = 4; else if (k ~ /^cover\./) r = 5
+      else if (k ~ /^review\./) r = 6; else if (k ~ /^(prs|merged|closed)\./) r = 7; else if (k ~ /^hold\./) r = 8; else if (k ~ /^hold_since\./) r = 9
       print r "\t" $0 }' | sort -t "$tab" -k1,1n -k2,2 |
     awk -F'\t' '{ L[NR] = "  \"" $2 "\": \"" $3 "\"" } END { print "{"; for (i = 1; i <= NR; i++) print L[i] (i < NR ? "," : ""); print "}" }' > "$t" &&
     { cmp -s "$t" "$1" && rm -f "$t" || mv "$t" "$1"; } || { rm -f "$t"; echo "state.sh: could not write $1" >&2; return 1; }
@@ -150,7 +152,7 @@ esac
 
 # Fields: those kept in the state are checked strictly; the rest are passed to the event as strings (or numbers).
 shift 2
-work=""; task=""; pr=""; stage=""; reason=""; extra=""
+work=""; task=""; pr=""; stage=""; reason=""; extra=""; by=""; via=""; at=""
 for arg in "$@"; do
   k="${arg%%=*}"; v="${arg#*=}"
   case "$arg" in *=*) ;; *) usage ;; esac
@@ -163,6 +165,7 @@ for arg in "$@"; do
     *)
       case "$v" in *'"'*|*\\*|*"
 "*) echo "$k may not hold \" or \\ or a line break" >&2; exit 3 ;; esac
+      case "$k" in by|via|at) eval "$k=\$v" ;; esac
       case "$k:$v" in lines:*|seq:*|total:*|tasks:*) case "$v" in ""|*[!0-9]*) extra="$extra,\"$k\":\"$v\"" ;; *) extra="$extra,\"$k\":$v" ;; esac ;; *) extra="$extra,\"$k\":\"$v\"" ;; esac ;;
   esac
 done
@@ -176,6 +179,25 @@ set_status() {
     fm == 1 && $0 == "---" { fm = 2 }
     fm == 1 && /^status:/ { sub(/^status:[ ]*[^ #]*/, "status: " S); fm = 2 }
     { print }' "$1" > "$1.$$" && mv "$1.$$" "$1"
+}
+
+# Setting front-matter fields (through a temp file): each key's line is replaced, or added before the closing ---;
+# "missing" leaves a key that already has a value alone.
+set_fm() {   # <file> <missing|always> <key> <value>…
+  f="$1"; mode="$2"; shift 2
+  while [ $# -ge 2 ]; do
+    [ "$mode" = always ] || [ -z "$(fm "$f" "$1")" ] && awk -v K="$1" -v V="$2" 'NR == 1 && $0 == "---" { fm = 1; print; next }
+      fm == 1 && $0 == "---" { if (!done) print K ": " V; fm = 2 }
+      fm == 1 && index($0, K ":") == 1 { print K ": " V; done = 1; next }
+      { print }' "$f" > "$f.$$" && mv "$f.$$" "$f"
+    shift 2
+  done
+}
+# approval <file> <mode>: approved_by and approved_at, from by= and at= (default today, UTC).
+approval() {
+  [ -f "$1" ] || return 0
+  who="${by:-$(git config user.name 2>/dev/null)}"; who="${who:-unknown}"; [ "$via" = companion ] && who="$who (via companion)"
+  set_fm "$1" "$2" approved_by "$who" approved_at "${at:-$(date -u +%Y-%m-%d)}"
 }
 
 lock_spec
@@ -210,10 +232,19 @@ cover=""; [ "$move" = plan-approve ] && [ -n "$work" ] && cover=$(covers "$work"
 case "$(status_of "$specf")" in approved|live) init=approved ;; *) init=draft ;; esac
 now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
-out=$(state | awk -v SPEC="$spec" -v MOVE="$move" -v W="$work" -v TASK="$task" -v PR="$pr" -v STAGE="$stage" -v REASON="$reason" \
+# A task whose newest outcome in the log is a failure or block may be started again (a retry), though it was started.
+retry=""
+[ "$move" = build-start ] && [ -n "$task" ] && [ -f "$root/events.jsonl" ] &&
+  [ "$(grep -E "\"type\":\"task\.(started|failed|blocked)\",\"work\":\"$work\"" "$root/events.jsonl" | grep -F "\"task\":\"$task\"" | tail -n1 | sed 's/.*"type":"task\.\([a-z]*\)".*/\1/')" != started ] && retry=1
+out=$(state | awk -v RETRY="$retry" -v SPEC="$spec" -v MOVE="$move" -v W="$work" -v TASK="$task" -v PR="$pr" -v STAGE="$stage" -v REASON="$reason" \
   -v TOTAL="$total" -v NOW="$now" -v INIT="$init" -v COVER="$cover" -f "$here/state-lib.awk")
 case "$out" in
-  "already "*) printf '%s\n' "${out#already }"; exit 0 ;;
+  "already "*)   # an approval a failed write left without its names is filled in; one that has them is left alone
+    case "$move" in
+      approve) approval "$specf" missing ;;
+      plan-approve) h="$root/work/$work/plan.md"; [ -f "$h" ] || h="$root/work/$work/tasks.md"; approval "$h" missing ;;
+    esac
+    printf '%s\n' "${out#already }"; exit 0 ;;
   "refuse "*) printf '%s\n' "${out#refuse }" >&2; exit 3 ;;
   ok*) ;;
   *) echo "state.sh: no result for $move" >&2; exit 1 ;;
@@ -225,8 +256,8 @@ seq=$(sed -n 's/^  "seq": "\([0-9]*\)".*/\1/p' "$file")
 plan_head="$root/work/$work/plan.md"; [ -f "$plan_head" ] || plan_head="$root/work/$work/tasks.md"
 case "$move" in
   write|edit) set_status "$specf" draft ;;
-  approve) case "$(status_of "$specf")" in approved|live) ;; *) set_status "$specf" approved ;; esac ;;
-  plan-approve) set_status "$plan_head" approved ;;
+  approve) case "$(status_of "$specf")" in approved|live) approval "$specf" missing ;; *) set_status "$specf" approved; approval "$specf" always ;; esac ;;
+  plan-approve) set_status "$plan_head" approved; approval "$plan_head" always ;;
 esac
 case "$move" in
   write) type=spec.created ;; approve) type=spec.approved ;; edit) type=spec.edited ;;

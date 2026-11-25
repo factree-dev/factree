@@ -554,13 +554,11 @@ function applyDecision(root, user, body, cards, today = (/* @__PURE__ */ new Dat
 			const done = !card && existsSync(file) && frontValue(file, "status") === "approved";
 			if (!card && !done) throw new DecisionError(409, `${spec} isn't waiting for approval`);
 			if (card && !card.approvable) throw new DecisionError(409, card.blockedReason ?? "Not approvable here");
-			stateMove(root, spec, "approve", [`by=${by}`, "via=companion"]);
-			const fields = {
-				approved_by: `${by} (via companion)`,
-				approved_at: today
-			};
-			if (card) setFrontMatter(file, fields);
-			else setMissing(file, fields);
+			stateMove(root, spec, "approve", [
+				`by=${by}`,
+				"via=companion",
+				`at=${today}`
+			]);
 			return;
 		}
 		case "approve-plan": {
@@ -578,6 +576,7 @@ function applyDecision(root, user, body, cards, today = (/* @__PURE__ */ new Dat
 				`work=${work}`,
 				`by=${by}`,
 				"via=companion",
+				`at=${today}`,
 				`tasks=${tasks}`
 			]);
 			for (const v of readdirSync(dir)) {
@@ -586,9 +585,7 @@ function applyDecision(root, user, body, cards, today = (/* @__PURE__ */ new Dat
 			}
 			const fields = {
 				design_approved_by: name,
-				design_approved_at: today,
-				approved_by: name,
-				approved_at: today
+				design_approved_at: today
 			};
 			if (card) setFrontMatter(head, fields);
 			if (card || setMissing(head, fields)) logEvent(root, "plan.design_approved", work, {
